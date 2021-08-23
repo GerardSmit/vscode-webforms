@@ -21,21 +21,26 @@
 	"contributes": {
 		"languages": [
 			{
-				"id": "cs-embedded"
+				"id": "cs-embedded",
+				"aliases": [
+					"Embedded C#"
+				]
 			},
 			{
 				"id": "webforms",
 				"aliases": [
-					"HTML (WebForms)",
-					"ASP.NET"
+					"WebForms (C#)"
 				],
+				"firstLine": "^\\s*<%@"
+			},
+			{
+				"id": "html",
 				"extensions": [
 					".aspx",
 					".ascx",
 					".asax",
 					".master"
-				],
-				"firstLine": "^\\s*<%@"
+				]
 			}
 		],
 		"grammars": [
@@ -49,8 +54,11 @@
 			},
 			{
 				"language": "webforms",
-				"scopeName": "text.html.webforms",
-				"path": "./syntaxes/webforms.tmLanguage.json"
+				"scopeName": "source.webforms",
+				"path": "./syntaxes/webforms.tmLanguage.json",
+				"injectTo": [
+					"text.html"
+				]
 			}
 		]
 	}
