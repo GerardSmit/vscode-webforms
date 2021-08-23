@@ -1,0 +1,57 @@
+{
+	"private": true,
+	"name": "vscode-webforms",
+	"displayName": "WebForms (C#)",
+	"description": "Syntax highlighting for WebForms (C#)",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/GerardSmit/vscode-webforms.git"
+	},
+	"license": "MIT",
+	"version": "1.0.0",
+	"publisher": "GerardSmit",
+	"author": "GerardSmit",
+	"keywords": [
+		"webforms",
+		"c#"
+	],
+	"engines": {
+		"vscode": "^1.33.0"
+	},
+	"contributes": {
+		"languages": [
+			{
+				"id": "cs-embedded"
+			},
+			{
+				"id": "webforms",
+				"aliases": [
+					"HTML (WebForms)",
+					"ASP.NET"
+				],
+				"extensions": [
+					".aspx",
+					".ascx",
+					".asax",
+					".master"
+				],
+				"firstLine": "^\\s*<%@"
+			}
+		],
+		"grammars": [
+			{
+				"language": "cs-embedded",
+				"aliases": [
+					"C# Embedded"
+				],
+				"scopeName": "source.cs-embedded",
+				"path": "./syntaxes/csharpEmbedded.tmLanguage.json"
+			},
+			{
+				"language": "webforms",
+				"scopeName": "text.html.webforms",
+				"path": "./syntaxes/webforms.tmLanguage.json"
+			}
+		]
+	}
+}
