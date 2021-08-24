@@ -28,9 +28,10 @@ export async function getResourceFiles(uri: vscode.Uri): Promise<ResourceFilePat
 
 		return files
 			.map(([name]) => ({name, match: name.match(regex) }))
+			.filter(({ match }) => match)
 			.map(({ name, match }) => ({
 				path: `App_LocalResources${path.sep}${name}`,
-				culture: match && match[1] ? match[1] : 'en-US',
+				culture: match[1] ? match[1] : 'en-US',
 				uri: uri.with({ path: `${info.dir}${path.sep}App_LocalResources${path.sep}${name}` })
 			}))
 			.sort()
