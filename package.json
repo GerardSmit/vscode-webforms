@@ -8,7 +8,7 @@
         "url": "https://github.com/GerardSmit/vscode-webforms.git"
     },
     "license": "MIT",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "publisher": "GerardSmit",
     "author": "GerardSmit",
     "keywords": [
@@ -27,7 +27,7 @@
         "@types/vscode": "^1.1.53",
         "rollup": "^2.56.3"
     },
-	"main": "./extension/index",
+    "main": "./extension/index",
     "engines": {
         "vscode": "^1.53.0"
     },
@@ -36,26 +36,28 @@
         "onLanguage:html"
     ],
     "capabilities": {
-        "completionProvider" : {
+        "completionProvider": {
             "resolveProvider": "true",
-            "triggerCharacters": [ "\"" ]
+            "triggerCharacters": [
+                "\""
+            ]
         }
     },
     "contributes": {
         "configuration": {
-			"type": "object",
-			"title": "WebForms",
-			"properties": {
+            "type": "object",
+            "title": "WebForms",
+            "properties": {
                 "webforms.resources.validation": {
-					"type": "boolean",
-					"default": false,
-					"description": "(Experimental) Enable resource file validation"
-				},
+                    "type": "boolean",
+                    "default": false,
+                    "description": "(Experimental) Enable resource file validation"
+                },
                 "webforms.resources.open": {
-					"type": "boolean",
-					"default": false,
-					"description": "(Experimental) Enable open resource file"
-				}
+                    "type": "boolean",
+                    "default": false,
+                    "description": "(Experimental) Enable open resource file"
+                }
             }
         },
         "languages": [
@@ -102,20 +104,20 @@
         ],
         "commands": [
             {
-				"command": "webforms.action.openResx",
-				"title": "Open Resource File",
-				"category": "WebForms",
-				"icon": "$(symbol-string)",
+                "command": "webforms.action.openResx",
+                "title": "Open Resource File",
+                "category": "WebForms",
+                "icon": "$(symbol-string)",
                 "enablement": "config.webforms.resources.open"
-			}
+            }
         ],
         "menus": {
-			"editor/title": [
-				{
-					"command": "webforms.action.openResx",
-					"when": "resourceExtname == .ascx && config.webforms.resources.open",
-					"group": "navigation"
-				}
+            "editor/title": [
+                {
+                    "command": "webforms.action.openResx",
+                    "when": "resourceExtname == .ascx && config.webforms.resources.open",
+                    "group": "navigation"
+                }
             ]
         }
     }
