@@ -33,11 +33,11 @@
                 {
                     "begin": "<%@",
                     "beginCaptures": {
-                        "0": { "name": "punctuation.section.embedded.begin.webforms" }
+                        "0": { "name": "punctuation.definition.tag.begin.webforms" }
                     },
                     "end": "%>",
                     "endCaptures": {
-                        "0": { "name": "punctuation.section.embedded.end.webforms" }
+                        "0": { "name": "punctuation.definition.tag.end.webforms" }
                     },
                     "patterns": [
                         {
@@ -67,11 +67,11 @@
                 {
                     "begin": "<%(?:[=:$]|#:?)?",
                     "beginCaptures": {
-                        "0": { "name": "punctuation.section.embedded.begin.webforms" }
+                        "0": { "name": "punctuation.definition.tag.begin.webforms" }
                     },
                     "end": "%>",
                     "endCaptures": {
-                        "0": { "name": "punctuation.section.embedded.end.webforms" }
+                        "0": { "name": "punctuation.definition.tag.end.webforms" }
                     },
                     "name": "meta.embedded.block.cs",
                     "contentName": "source.cs-embedded",
@@ -82,11 +82,11 @@
                 {
                     "begin": "<%(?![=#:$])",
                     "beginCaptures": {
-                        "0": { "name": "punctuation.section.embedded.begin.webforms" }
+                        "0": { "name": "punctuation.definition.tag.begin.webforms" }
                     },
                     "end": "%>",
                     "endCaptures": {
-                        "0": { "name": "punctuation.section.embedded.end.webforms" }
+                        "0": { "name": "punctuation.definition.tag.end.webforms" }
                     },
                     "name": "meta.embedded.block.cs",
                     "contentName": "source.cs-embedded",
