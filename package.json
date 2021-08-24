@@ -1,65 +1,122 @@
 {
-	"private": true,
-	"name": "vscode-webforms",
-	"displayName": "WebForms (C#)",
-	"description": "Syntax highlighting for WebForms (C#)",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/GerardSmit/vscode-webforms.git"
-	},
-	"license": "MIT",
-	"version": "1.1.0",
-	"publisher": "GerardSmit",
-	"author": "GerardSmit",
-	"keywords": [
-		"webforms",
-		"c#"
-	],
-	"engines": {
-		"vscode": "^1.33.0"
-	},
-	"contributes": {
-		"languages": [
-			{
-				"id": "cs-embedded",
-				"aliases": [
-					"Embedded C#"
-				]
-			},
-			{
-				"id": "webforms",
-				"aliases": [
-					"WebForms (C#)"
-				],
-				"firstLine": "^\\s*<%@"
-			},
-			{
-				"id": "html",
-				"extensions": [
-					".aspx",
-					".ascx",
-					".asax",
-					".master"
-				]
+    "private": true,
+    "name": "vscode-webforms",
+    "displayName": "WebForms (C#)",
+    "description": "Syntax highlighting for WebForms (C#)",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/GerardSmit/vscode-webforms.git"
+    },
+    "license": "MIT",
+    "version": "1.1.0",
+    "publisher": "GerardSmit",
+    "author": "GerardSmit",
+    "keywords": [
+        "webforms",
+        "c#"
+    ],
+    "scripts": {
+        "build": "rollup -c",
+        "watch": "rollup -c -w --env=dev"
+    },
+    "devDependencies": {
+        "@rollup/plugin-commonjs": "^20.0.0",
+        "@rollup/plugin-node-resolve": "^13.0.4",
+        "@rollup/plugin-typescript": "^8.2.5",
+        "@types/node": "^12.6.9",
+        "@types/vscode": "^1.1.53",
+        "rollup": "^2.56.3"
+    },
+	"main": "./extension/index",
+    "engines": {
+        "vscode": "^1.53.0"
+    },
+    "activationEvents": [
+        "onCommand:webforms.action.openResx",
+        "onLanguage:html"
+    ],
+    "capabilities": {
+        "completionProvider" : {
+            "resolveProvider": "true",
+            "triggerCharacters": [ "\"" ]
+        }
+    },
+    "contributes": {
+        "configuration": {
+			"type": "object",
+			"title": "WebForms",
+			"properties": {
+                "webforms.resources.validation": {
+					"type": "boolean",
+					"default": false,
+					"description": "(Experimental) Enable resource file validation"
+				},
+                "webforms.resources.open": {
+					"type": "boolean",
+					"default": false,
+					"description": "(Experimental) Enable open resource file"
+				}
+            }
+        },
+        "languages": [
+            {
+                "id": "cs-embedded",
+                "aliases": [
+                    "Embedded C#"
+                ]
+            },
+            {
+                "id": "webforms",
+                "aliases": [
+                    "WebForms (C#)"
+                ],
+                "firstLine": "^\\s*<%@"
+            },
+            {
+                "id": "html",
+                "extensions": [
+                    ".aspx",
+                    ".ascx",
+                    ".asax",
+                    ".master"
+                ]
+            }
+        ],
+        "grammars": [
+            {
+                "language": "cs-embedded",
+                "aliases": [
+                    "C# Embedded"
+                ],
+                "scopeName": "source.cs-embedded",
+                "path": "./syntaxes/csharpEmbedded.tmLanguage.json"
+            },
+            {
+                "language": "webforms",
+                "scopeName": "source.webforms",
+                "path": "./syntaxes/webforms.tmLanguage.json",
+                "injectTo": [
+                    "text.html"
+                ]
+            }
+        ],
+        "commands": [
+            {
+				"command": "webforms.action.openResx",
+				"title": "Open Resource File",
+				"category": "WebForms",
+				"icon": "$(symbol-string)",
+                "enablement": "config.webforms.resources.open"
 			}
-		],
-		"grammars": [
-			{
-				"language": "cs-embedded",
-				"aliases": [
-					"C# Embedded"
-				],
-				"scopeName": "source.cs-embedded",
-				"path": "./syntaxes/csharpEmbedded.tmLanguage.json"
-			},
-			{
-				"language": "webforms",
-				"scopeName": "source.webforms",
-				"path": "./syntaxes/webforms.tmLanguage.json",
-				"injectTo": [
-					"text.html"
-				]
-			}
-		]
-	}
+        ],
+        "menus": {
+			"editor/title": [
+				{
+					"command": "webforms.action.openResx",
+					"when": "resourceExtname == .ascx && config.webforms.resources.open",
+					"group": "navigation"
+				}
+            ]
+        }
+    }
 }
