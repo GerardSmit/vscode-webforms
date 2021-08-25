@@ -51,7 +51,7 @@
                             }
                         },
                         {
-                            "match": "\\s*(Application|Page|Control|Import|Implements|Register|Assembly|OutputCache|Reference|Master|PreviousPageType|MasterType|WebHandler)\\b(?:(=)\"([^\"]+)\")?",
+                            "match": "(?i)\\s*(Application|Page|Control|Import|Implements|Register|Assembly|OutputCache|Reference|Master|PreviousPageType|MasterType|WebHandler)\\b(?:(=)\"([^\"]+)\")?",
                             "captures": {
                                 "1": { "name": "constant.language.processing-directive.webforms" },
                                 "2": { "name": "punctuation.separator.key-value.webforms" },
@@ -132,15 +132,15 @@
                             "endCaptures": {
                                 "0": { "name": "meta.tag.metadata.script.end.html" },
                                 "1": { "name": "punctuation.definition.tag.begin.html" },
-                                "2": { "name": "source.cs-embedded" }
+                                "2": { "name": "source.cs" }
                             },
                             "patterns": [
                                 {
                                     "begin": "\\G",
                                     "end": "(?=</(?i:script))",
-                                    "name": "source.cs-embedded",
+                                    "name": "source.cs",
                                     "patterns": [
-                                        { "include": "source.cs-embedded" }
+                                        { "include": "source.cs" }
                                     ]
                                 }
                             ]
