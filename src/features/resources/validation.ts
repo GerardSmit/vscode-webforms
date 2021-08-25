@@ -45,9 +45,21 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	}));
 
+	context.subscriptions.push(vscode.languages.registerHoverProvider('html', {
+		provideHover: hover
+	}));
+
+	context.subscriptions.push(vscode.languages.registerDefinitionProvider('html', {
+		provideDefinition: findDefinitions
+	}));
+
 	context.subscriptions.push(vscode.languages.registerCompletionItemProvider("html", {
 		provideCompletionItems: autoComplete
 	}, '"'));
+
+	context.subscriptions.push(vscode.languages.registerRenameProvider("html", {
+		provideRenameEdits: renameEdits
+	}));
 }
 
 const resourceKeys = new Map<vscode.Uri, string[]>()
@@ -55,6 +67,11 @@ const resourceKeys = new Map<vscode.Uri, string[]>()
 type Resource = {
 	name: string
 	value: string
+	range: {
+		all: vscode.Range
+		name: vscode.Range
+		value: vscode.Range
+	}
 }
 
 type ResourceFile = {
@@ -71,11 +88,28 @@ async function getResourceFile(path: ResourceFilePath): Promise<ResourceFile> {
 		const document = await vscode.workspace.openTextDocument(path.uri)
 		const str = document.getText()
 
-		const dataRegex = /<data\s*name="([^"]+)"[^>]+>[\s\S]*?<value>([\s\S]*?)<\/value>[\s\S]*?<\/data>/g
+		const dataRegex = /((<data\s*name=")([^"]+)"[^>]+>[\s\S]*?<value>)([\s\S]*?)<\/value>[\s\S]*?<\/data>/g
 		for (let m: RegExpExecArray; m = dataRegex.exec(str); m !== null) {
-			const [, name, value] = m
+			const [fullMatch, start, nameStart, name, value] = m
 
-			resources.push({ name, value })
+			resources.push({
+				name,
+				value,
+				range: {
+					all: new vscode.Range(
+						document.positionAt(m.index),
+						document.positionAt(m.index + fullMatch.length),
+					),
+					name: new vscode.Range(
+						document.positionAt(m.index + nameStart.length),
+						document.positionAt(m.index + nameStart.length + name.length),
+					),
+					value: new vscode.Range(
+						document.positionAt(m.index + start.length),
+						document.positionAt(m.index + start.length + value.length),
+					)
+				},
+			})
 		}
 
 		const endPosition = str.lastIndexOf("</data>")
@@ -173,12 +207,12 @@ async function updateDiagnostics(document: vscode.TextDocument, collection: vsco
 	collection.set(document.uri, errors);
 }
 
-async function autoComplete(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.CompletionItem[]> {
-	const text = document.getText(document.lineAt(position.line).range)
-	const match = text.match(/(GetString\(")([^"]+)?("?\)?\s*%?>?)/)
+function getGetString(document: vscode.TextDocument, position: vscode.Position) {
+	const line = document.getText(document.lineAt(position.line).range)
+	const match = line.match(/(GetString\(")([^"]+)?("?\)?\s*%?>?)/)
 
 	if (!match) {
-		return []
+		return { success: false }
 	}
 
 	const pos = position.character
@@ -187,15 +221,26 @@ async function autoComplete(document: vscode.TextDocument, position: vscode.Posi
 	const end = name ? start + name.length : pos
 
 	if (pos < start || name && pos > end) {
-		return []
+		return { success: false }
 	}
 
-	const input = text.slice(start, pos)
+	const nameRange = new vscode.Range(new vscode.Position(position.line, start), new vscode.Position(position.line, end))
+
+	return { success: true, line, start, end, pos, suffix, name, nameRange }
+}
+
+async function autoComplete(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.CompletionItem[]> {
+	const { success, line, start, end, pos, nameRange } = getGetString(document, position)
+
+	if (!success) {
+		return []
+	}
+	
+	const input = line.slice(start, pos)
 	let files = await getResourceFilePaths(document)
 	let resourceFiles = await Promise.all(files.map(i => getResourceFile(i)))
 
 	const items: vscode.CompletionItem[] = []
-	const range = new vscode.Range(new vscode.Position(position.line, start), new vscode.Position(position.line, end))
 	const itemsByName: {[key: string]: vscode.CompletionItem} = {}
 
 	for (const file of resourceFiles) {
@@ -218,7 +263,7 @@ async function autoComplete(document: vscode.TextDocument, position: vscode.Posi
 						detail: file.path.culture,
 						insertText: text,
 						documentation: new vscode.MarkdownString(`\`${file.path.culture}\``).appendCodeblock(resource.value, 'xml'),
-						range
+						range: nameRange
 					}
 
 					itemsByName[resource.name] = item
@@ -230,4 +275,97 @@ async function autoComplete(document: vscode.TextDocument, position: vscode.Posi
 
 	items.sort(sortByKey("insertText"))
 	return items
+}
+
+async function findDefinitions(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.DefinitionLink[]> {
+	const { success, name } = getGetString(document, position)
+
+	if (!success || !name) {
+		return []
+	}
+
+	let files = await getResourceFilePaths(document)
+	let resourceFiles = await Promise.all(files.map(i => getResourceFile(i)))
+	const definitions: vscode.DefinitionLink[] = []
+
+	const resourceName = name.indexOf('.') === -1
+		? name + '.Text'
+		: name
+
+	for (const file of resourceFiles) {
+		for (const resource of file.resources) {
+			if (resource.name === resourceName) {
+				definitions.push({
+					targetUri: file.path.uri,
+					targetRange: resource.range.value
+				})
+			}
+		}
+	}
+
+	return definitions
+}
+
+async function hover(document: vscode.TextDocument, position: vscode.Position): Promise<vscode.Hover> {
+	const { success, name } = getGetString(document, position)
+
+	if (!success || !name) {
+		return null
+	}
+
+	let files = await getResourceFilePaths(document)
+	let resourceFiles = await Promise.all(files.map(i => getResourceFile(i)))
+
+	const resourceName = name.indexOf('.') === -1
+		? name + '.Text'
+		: name
+
+	const str = new vscode.MarkdownString()
+	str.isTrusted = true
+
+	for (const file of resourceFiles) {
+		for (const resource of file.resources) {
+			if (resource.name === resourceName) {
+				str.appendMarkdown(`[\` ${file.path.culture} \`](${file.path.uri}#L${resource.range.value.start.line + 1})`)
+				str.appendCodeblock(resource.value, 'xml')
+			}
+		}
+	}
+
+	return {
+		contents: [str]
+	}
+}
+
+async function renameEdits(document: vscode.TextDocument, position: vscode.Position, newName: string): Promise<vscode.WorkspaceEdit> {
+	const { success, name, start, end, nameRange } = getGetString(document, position)
+
+	if (!success || !name) {
+		return null
+	}
+
+	let files = await getResourceFilePaths(document)
+	let resourceFiles = await Promise.all(files.map(i => getResourceFile(i)))
+
+	const resourceName = name.indexOf('.') === -1
+		? name + '.Text'
+		: name
+
+	const newResourceName = newName.indexOf('.') === -1
+		? newName + '.Text'
+		: newName
+
+	var edit = new vscode.WorkspaceEdit()
+
+	edit.replace(document.uri, nameRange, newName)
+
+	for (const file of resourceFiles) {
+		for (const resource of file.resources) {
+			if (resource.name === resourceName) {
+				edit.replace(file.path.uri, resource.range.name, newResourceName)
+			}
+		}
+	}
+
+	return edit
 }
