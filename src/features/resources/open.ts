@@ -126,53 +126,51 @@ const defaultResxData = Buffer.from(defaultResx, 'utf8');
 
 export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(vscode.commands.registerCommand('webforms.action.openResx', openResx));
+}
 
-	async function openResx() {
-		const editor = vscode.window.activeTextEditor;
-		if (!editor) return;
+async function openResx() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
 
-		const { uri } = editor.document
-		const info = path.parse(uri.path)
+  const { uri } = editor.document
+  const info = path.parse(uri.path)
 
-		if (info.ext !== ".ascx") return;
+  const resourceNameStart = `${info.name}${info.ext}`
+  const resourceNameEnd = '.resx'
 
-		const resourceNameStart = `${info.name}${info.ext}`
-		const resourceNameEnd = '.resx'
+  try {
+    const files = await getResourceFiles(uri)
+    const resourceFiles = files.map(r => r.path).sort()
+    let file: string
 
-		try {
-			const files = await getResourceFiles(uri)
-			const resourceFiles = files.map(r => r.path).sort()
-			let file: string
+    if (resourceFiles.length === 0) {
+      throw new Error('no resource files found')
+    } else if (resourceFiles.length === 1) {
+      file = resourceFiles[0]
+    } else {
+      file = await vscode.window.showQuickPick(resourceFiles, {
+        title: "Select the resource file to open"
+      })
+    }
+    
+    if (file) {
+      await vscode.window.showTextDocument(uri.with({
+        path: `${info.dir}${path.sep}${file}`
+      }))
+    }
+  } catch {
+      const result = await vscode.window.showErrorMessage(
+      `File '${resourceNameStart}' does not exists. Do you want to create this file?`,
+      'Yes',
+      'No'
+    );
 
-			if (resourceFiles.length === 0) {
-				throw new Error('no resource files found')
-			} else if (resourceFiles.length === 1) {
-				file = resourceFiles[0]
-			} else {
-				file = await vscode.window.showQuickPick(resourceFiles, {
-					title: "Select the resource file to open"
-				})
-			}
-			
-			if (file) {
-				await vscode.window.showTextDocument(uri.with({
-					path: `${info.dir}${path.sep}${file}`
-				}))
-			}
-		} catch {
-  			const result = await vscode.window.showErrorMessage(
-				`File '${resourceNameStart}' does not exists. Do you want to create this file?`,
-				'Yes',
-				'No'
-			);
+    if (result === 'Yes') {
+      const resource = uri.with({ path: `${info.dir}${path.sep}App_LocalResources${path.sep}${resourceNameStart}${resourceNameEnd}` })
 
-			if (result === 'Yes') {
-				const resource = uri.with({ path: `${info.dir}${path.sep}App_LocalResources${path.sep}${resourceNameStart}${resourceNameEnd}` })
-
-				await vscode.workspace.fs.createDirectory(uri.with({ path: `${info.dir}${path.sep}App_LocalResources` }))
-				await vscode.workspace.fs.writeFile(resource, defaultResxData)
-				await vscode.window.showTextDocument(resource)
-			}
-		}
-	}
+      await vscode.workspace.fs.createDirectory(uri.with({ path: `${info.dir}${path.sep}App_LocalResources` }))
+      await vscode.workspace.fs.writeFile(resource, defaultResxData)
+      await vscode.window.showTextDocument(resource)
+    }
+  }
 }

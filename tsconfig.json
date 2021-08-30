@@ -2,8 +2,10 @@
     "compilerOptions": {
         "target": "ES2019",
         "lib": [
-            "es6"
-        ]
+            "es2020"
+        ],
+        "moduleResolution": "node",
+        "sourceMap": true
     },
     "exclude": [
         "node_modules"

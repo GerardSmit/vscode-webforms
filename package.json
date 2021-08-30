@@ -33,6 +33,7 @@
     },
     "activationEvents": [
         "onCommand:webforms.action.openResx",
+        "onCommand:webforms.action.openReferencedControl",
         "onLanguage:html"
     ],
     "capabilities": {
@@ -109,6 +110,12 @@
                 "category": "WebForms",
                 "icon": "$(symbol-string)",
                 "enablement": "config.webforms.resources.open"
+            },
+            {
+                "command": "webforms.action.openReferencedControl",
+                "title": "Open referenced user control",
+                "category": "WebForms",
+                "icon": "$(references)"
             }
         ],
         "menus": {
@@ -116,6 +123,11 @@
                 {
                     "command": "webforms.action.openResx",
                     "when": "resourceExtname == .ascx && config.webforms.resources.open",
+                    "group": "navigation"
+                },
+                {
+                    "command": "webforms.action.openReferencedControl",
+                    "when": "resourceExtname == .ascx",
                     "group": "navigation"
                 }
             ]

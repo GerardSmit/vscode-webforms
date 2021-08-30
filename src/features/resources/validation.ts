@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { getResourceFiles, ResourceFilePath } from '../../utils/resource';
 import { Throttle } from '../../utils/throttle';
 import { dynamicSort as sortByKey } from '../../utils/array';
+import { useDocumentCache } from '../../utils/document-cache';
 
 export async function activate(context: vscode.ExtensionContext) {
 	let enabled = vscode.workspace.getConfiguration('webforms').get<boolean>("resources.validation")
 
 	vscode.workspace.onDidChangeConfiguration(async (e) => {
 		if (e.affectsConfiguration("webforms.resources.validation")) {
-			let newValue = vscode.workspace.getConfiguration('webforms').get<boolean>("resources.validation")
+			let newValue = vscode.workspace.getConfiguration('html').get<boolean>("resources.validation")
 
 			if (enabled === newValue) {
 				return
@@ -26,7 +26,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		return
 	}
 
-	const collection = vscode.languages.createDiagnosticCollection('webforms');
+	const collection = vscode.languages.createDiagnosticCollection('html');
 	const throttle = new Throttle(1000, document => updateDiagnostics(document, collection))
 
 	if (vscode.window.activeTextEditor) {
@@ -62,8 +62,6 @@ export async function activate(context: vscode.ExtensionContext) {
 	}));
 }
 
-const resourceKeys = new Map<vscode.Uri, string[]>()
-
 type Resource = {
 	name: string
 	value: string
@@ -80,12 +78,11 @@ type ResourceFile = {
 	resources: Resource[]
 }
 
-async function getResourceFile(path: ResourceFilePath): Promise<ResourceFile> {
+const getResourceFile = useDocumentCache<ResourceFile, ResourceFilePath>(async (path, document) => {
 	let resources: Resource[] = []
 	let endOfFile = new vscode.Position(0, 0)
 
 	try {
-		const document = await vscode.workspace.openTextDocument(path.uri)
 		const str = document.getText()
 
 		const dataRegex = /((<data\s*name=")([^"]+)"[^>]+>[\s\S]*?<value>)([\s\S]*?)<\/value>[\s\S]*?<\/data>/g
@@ -126,7 +123,7 @@ async function getResourceFile(path: ResourceFilePath): Promise<ResourceFile> {
 		resources,
 		endOfFile
 	}
-}
+})
 
 const fileResourceCache = new Map<vscode.Uri, ResourceFilePath[]>()
 
@@ -339,9 +336,10 @@ async function hover(document: vscode.TextDocument, position: vscode.Position): 
 
 async function renameEdits(document: vscode.TextDocument, position: vscode.Position, newName: string): Promise<vscode.WorkspaceEdit> {
 	const { success, name, start, end, nameRange } = getGetString(document, position)
+	const edit = new vscode.WorkspaceEdit()
 
 	if (!success || !name) {
-		return null
+		return edit
 	}
 
 	let files = await getResourceFilePaths(document)
@@ -354,8 +352,6 @@ async function renameEdits(document: vscode.TextDocument, position: vscode.Posit
 	const newResourceName = newName.indexOf('.') === -1
 		? newName + '.Text'
 		: newName
-
-	var edit = new vscode.WorkspaceEdit()
 
 	edit.replace(document.uri, nameRange, newName)
 
