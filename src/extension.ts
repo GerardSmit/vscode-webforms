@@ -6,7 +6,7 @@ import { acquireDotNet } from './acquireDotNet';
 
 export async function activate(context: vscode.ExtensionContext) {
     const dotnet = await acquireDotNet('6.0', 'GerardSmit.vscode-webforms');
-    const server = path.join(__dirname, 'bin', 'WebForms.LanguageServer.exe');
+    const server = path.join(__dirname, 'bin', 'WebForms.LanguageServer.dll');
 
     const output = vscode.window.createOutputChannel('WebForms');
     const command = dotnet;
