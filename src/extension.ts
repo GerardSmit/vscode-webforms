@@ -5,12 +5,18 @@ import { Trace } from 'vscode-jsonrpc';
 import { acquireDotNet } from './acquireDotNet';
 
 export async function activate(context: vscode.ExtensionContext) {
-    const dotnet = await acquireDotNet('6.0', 'GerardSmit.vscode-webforms');
-    const server = path.join(__dirname, 'bin', 'WebForms.LanguageServer.dll');
-
     const output = vscode.window.createOutputChannel('WebForms');
-    const command = dotnet;
-    const args = [server];
+
+    let command, args;
+
+    if (process.env.NODE_ENV === 'dev') {
+        command = process.env.SERVER_PATH;
+        args = [];
+    } else {
+        command = await acquireDotNet('6.0', 'GerardSmit.vscode-webforms');
+        args = [path.join(__dirname, 'bin', 'WebForms.LanguageServer.dll')];
+    }
+
     const transport = TransportKind.pipe
     const document = { scheme: 'file', language: 'html' };
  
