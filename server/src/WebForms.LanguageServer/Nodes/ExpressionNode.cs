@@ -24,22 +24,4 @@ public class ExpressionNode : Node
             Kind = SymbolKind.String,
         };
     }
-
-    public override void AddRanges(ICollection<HitRange> ranges)
-    {
-        ranges.Add(new HitRange(Text.Range));
-    }
-
-    public override Hover Hover(List<DocumentHighlight> items, HitRange hit, Document document, Position position)
-    {
-        var offset = document.Lines[position.Line] + position.Character - Text.Range.Start.Offset;
-        var token = Expression.FindToken(offset);
-        
-        return new Hover
-        {
-            Contents = new MarkedStringsOrMarkupContent(
-                new MarkedString("csharp", token.Text)
-            )
-        };
-    }
 }

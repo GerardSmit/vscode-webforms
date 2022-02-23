@@ -2,6 +2,7 @@
 
 public enum DirectiveType
 {
+    Unknown,
     Assembly,
     Control,
     Implements,

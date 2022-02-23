@@ -67,6 +67,12 @@ public class LexerTest
         @"<div id=test>",
         new[] { TagOpen, ElementName, Attribute, AttributeValue, TagClose }
     )]
+    
+    // Inline Expression
+    [InlineData(
+        @"<div id=""Hello<%= World %>"">",
+        new[] { TagOpen, ElementName, Attribute, AttributeValue, Expression, TagClose }
+    )]
 
     // Text
     [InlineData(

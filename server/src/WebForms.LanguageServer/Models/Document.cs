@@ -1,4 +1,6 @@
-﻿using Mono.Cecil;
+﻿using Microsoft.CodeAnalysis.CSharp;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -6,6 +8,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using WebForms.Collections;
 using WebForms.Nodes;
 using WebForms.Roslyn;
+using static OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity;
 using DiagnosticSeverity = Microsoft.CodeAnalysis.DiagnosticSeverity;
 
 namespace WebForms.Models;
@@ -46,6 +49,8 @@ public class Document
     public List<int> Lines { get; set; } = new();
 
     public Dictionary<string, ControlReference> Controls { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    
+    public TokenString Code { get; set; }
 
     public string Text
     {
@@ -62,6 +67,7 @@ public class Document
             Node = parser.Root;
 
             Lines = lexer.Lines;
+            Code = lexer.Code;
 
             // Hit ranges
             var hitRanges = new List<HitRange>();
@@ -146,33 +152,46 @@ public class Document
                     visitor.Inspect(Type, expressionNode.Expression);
                 }
 
-                foreach (var diagnostic in expressionNode.Expression.GetDiagnostics())
-                {
-                    if (diagnostic.Location.IsInSource)
-                    {
-                        diagnostics.Add(new Diagnostic
-                        {
-                            Code = diagnostic.Id,
-                            Range = visitor.GetRange(diagnostic.Location.SourceSpan),
-                            Message = diagnostic.GetMessage(),
-                            Severity = diagnostic.Severity switch {
-                                DiagnosticSeverity.Hidden => OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity.Error,
-                                DiagnosticSeverity.Info => OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity.Information,
-                                DiagnosticSeverity.Warning => OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity.Warning,
-                                DiagnosticSeverity.Error => OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity.Error,
-                                _ => throw new ArgumentOutOfRangeException()
-                            }
-                        });
-                    }
-                }
+                AddDiagnostics(expressionNode.Expression.GetDiagnostics(), diagnostics, visitor);
             }
         }
+
+        var tree = SyntaxFactory.ParseSyntaxTree(Code);
+        var rootVisitor = new ExpressionVisitor(this, diagnostics, Code.Range);
+
+        AddDiagnostics(tree.GetDiagnostics(), diagnostics, rootVisitor);
         
         _languageServer.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
         {
             Diagnostics = diagnostics,
             Uri = Uri
         });
+    }
+
+    private static void AddDiagnostics(IEnumerable<Microsoft.CodeAnalysis.Diagnostic> statementNode, List<Diagnostic> diagnostics, ExpressionVisitor visitor)
+    {
+        foreach (var diagnostic in statementNode)
+        {
+            if (!diagnostic.Location.IsInSource)
+            {
+                continue;
+            }
+            
+            diagnostics.Add(new Diagnostic
+            {
+                Code = diagnostic.Id,
+                Range = visitor.GetRange(diagnostic.Location.SourceSpan),
+                Message = diagnostic.GetMessage(),
+                Severity = diagnostic.Severity switch
+                {
+                    DiagnosticSeverity.Hidden => Error,
+                    DiagnosticSeverity.Info => Information,
+                    DiagnosticSeverity.Warning => Warning,
+                    DiagnosticSeverity.Error => Error,
+                    _ => throw new ArgumentOutOfRangeException()
+                }
+            });
+        }
     }
 
     private void RemoveControls(ControlReferenceSource source)

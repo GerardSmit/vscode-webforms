@@ -38,8 +38,13 @@ internal class ParserContainer
         Parent = node;
     }
 
-    public HtmlNode Pop()
+    public HtmlNode? Pop()
     {
+        if (_stack.Count == 0)
+        {
+            return null;
+        }
+        
         var current = _stack.Pop();
         Current = _stack.Count > 0 ? _stack.Peek() : null;
         Parent = (ContainerNode?) Current ?? Root;

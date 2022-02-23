@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis.CSharp;
+﻿using System.Text;
+using Microsoft.CodeAnalysis.CSharp;
 using WebForms.Models;
 using WebForms.Nodes;
 
@@ -25,6 +26,9 @@ public class Parser
             case TokenType.Expression:
                 ConsumeExpression(token);
                 break;
+            case TokenType.Statement:
+                ConsumeStatement(token);
+                break;
             case TokenType.TagOpen:
                 ConsumeOpenTag(ref lexer, token.Range.Start);
                 break;
@@ -44,6 +48,17 @@ public class Parser
             Range = token.Range,
             Text = token.Text,
             Expression = SyntaxFactory.ParseExpression(token.Text)
+        };
+
+        _container.Add(element);
+    }
+
+    private void ConsumeStatement(Token token)
+    {
+        var element = new StatementNode
+        {
+            Range = token.Range,
+            Text = token.Text
         };
 
         _container.Add(element);
@@ -72,7 +87,7 @@ public class Parser
 
                 if (isFirst)
                 {
-                    element.DirectiveType = Enum.Parse<DirectiveType>(next.Text, true);
+                    element.DirectiveType = Enum.TryParse<DirectiveType>(next.Text, true, out var type) ? type : DirectiveType.Unknown;
                     isFirst = false;
                 }
                 else
@@ -113,6 +128,7 @@ public class Parser
 
         lexer.Next();
         element.StartTag.Name = name.Text;
+        _container.Push(element);
 
         while (lexer.Next() is { } next)
         {
@@ -139,13 +155,12 @@ public class Parser
             else if (next.Type == TokenType.TagSlashClose)
             {
                 element.Range = element.Range.WithEnd(next.Range.End);
-                _container.Add(element);
+                _container.Pop();
                 break;
             }
             else if (next.Type == TokenType.TagClose)
             {
                 element.Range = element.Range.WithEnd(next.Range.End);
-                _container.Push(element);
                 break;
             }
             else
@@ -188,16 +203,24 @@ public class Parser
 
         var pop = _container.Pop();
 
-        if (pop.Name == name.Text && pop.Namespace == endNamespace)
+        if (pop == null)
         {
-            pop.Range = pop.Range.WithEnd(endPosition);
-
-            pop.EndTag = new()
-            {
-                Name = name.Text,
-                Namespace = endNamespace,
-                Range = new TokenRange(startPosition, lexer.Position)
-            };
+            return;
         }
+
+        if (pop.Name != name.Text || pop.Namespace != endNamespace)
+        {
+            return;
+        }
+        
+        pop.Range = pop.Range.WithEnd(endPosition);
+
+        pop.EndTag = new()
+        {
+            Name = name.Text,
+            Namespace = endNamespace,
+            Range = new TokenRange(startPosition, lexer.Position)
+        };
+
     }
 }

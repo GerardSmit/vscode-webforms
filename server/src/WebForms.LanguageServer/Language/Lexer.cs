@@ -1,10 +1,10 @@
-﻿using WebForms.Models;
+﻿using System.Text;
+using WebForms.Models;
 
 namespace WebForms;
 
 public ref struct Lexer
 {
-    private static readonly ReadOnlyMemory<char> StartDirective = "<%@".ToCharArray();
     private static readonly ReadOnlyMemory<char> StartDocType = "<!DOCTYPE".ToCharArray();
     private static readonly ReadOnlyMemory<char> StartStatement = "<%".ToCharArray();
     private static readonly ReadOnlyMemory<char> End = "%>".ToCharArray();
@@ -12,7 +12,8 @@ public ref struct Lexer
     private static readonly ReadOnlyMemory<char> EndComment = "-->".ToCharArray();
     private static readonly ReadOnlyMemory<char> RunAt = "runat".ToCharArray();
 
-    private readonly ReadOnlySpan<char> _startDirective;
+    private readonly StringBuilder _codeBuilder;
+
     private readonly ReadOnlySpan<char> _startStatement;
     private readonly ReadOnlySpan<char> _end;
     private readonly ReadOnlySpan<char> _startDocType;
@@ -27,11 +28,12 @@ public ref struct Lexer
     private int _column;
     private int _nodeOffset;
     private bool _ignoreNewLine;
+    private bool _toCode;
 
     public Lexer(ReadOnlySpan<char> input)
     {
+        _codeBuilder = new StringBuilder(input.Length);
         _nodes = new List<Token>();
-        _startDirective = StartDirective.Span;
         _startStatement = StartStatement.Span;
         _startDocType = StartDocType.Span;
         _startComment = StartComment.Span;
@@ -44,12 +46,15 @@ public ref struct Lexer
         _offset = 0;
         _nodeOffset = -1;
         _ignoreNewLine = false;
+        _toCode = false;
     }
 
     public List<int> Lines { get; } = new() { 0 };
 
     public TokenPosition Position => new(_offset, _line, _column);
 
+    public TokenString Code => new(_codeBuilder.ToString(), new TokenRange(default, Position));
+    
     private char Current => _offset < _input.Length ? _input[_offset] : '\0';
 
     public bool HasNext => _offset < _input.Length || _nodeOffset < _nodes.Count;
@@ -57,18 +62,18 @@ public ref struct Lexer
     public void Forward()
     {
         _column++;
-        CheckNewLine();
+        CheckNewLine(1);
         _offset++;
     }
 
     public void Forward(int length)
     {
         _column += length;
-        CheckNewLine();
+        CheckNewLine(length);
         _offset += length;
     }
 
-    private void CheckNewLine()
+    private void CheckNewLine(int length)
     {
         if (_offset >= _input.Length)
         {
@@ -77,6 +82,22 @@ public ref struct Lexer
 
         var current = Current;
         var isNewLine = current is '\r' or '\n';
+
+        if (isNewLine || _toCode)
+        {
+            _codeBuilder.Append(current);
+        }
+        else if (length == 1)
+        {
+            _codeBuilder.Append(' ');
+        }
+        else
+        {
+            for (var i = 0; i < length; i++)
+            {
+                _codeBuilder.Append(' ');
+            }
+        }
 
         if (_ignoreNewLine)
         {
@@ -147,11 +168,6 @@ public ref struct Lexer
             return true;
         }
 
-        if (ConsumeDirective())
-        {
-            return true;
-        }
-
         if (ConsumeInline())
         {
             return true;
@@ -178,24 +194,6 @@ public ref struct Lexer
         return Consume(_startComment, _endComment, TokenType.Comment);
     }
 
-    private bool ConsumeDirective()
-    {
-        if (!Consume(_startDirective, TokenType.StartDirective))
-        {
-            return false;
-        }
-
-        SkipWhiteSpace();
-
-        while (!Consume(_end, TokenType.EndDirective) && ReadAttribute())
-        {
-            SkipWhiteSpace();
-        }
-
-        return true;
-
-    }
-
     private bool ConsumeDocType()
     {
         if (!Consume(_startDocType, true))
@@ -212,6 +210,11 @@ public ref struct Lexer
 
     private bool ConsumeWebFormsTag()
     {
+        if (Current != '<')
+        {
+            return false;
+        }
+        
         return ConsumeElement(true) || ConsumeInline();
     }
 
@@ -365,7 +368,7 @@ public ref struct Lexer
 
         var type = TokenType.Statement;
 
-        if (Consume(':') || Consume('='))
+        if (Consume('#') || Consume(':') || Consume('='))
         {
             type = TokenType.Expression;
         }
@@ -373,8 +376,20 @@ public ref struct Lexer
         {
             type = TokenType.EvalExpression;
         }
+        else if (Consume('@'))
+        {
+            AddNode(TokenType.StartDirective, start);
+            SkipWhiteSpace();
 
-        return ConsumeUntil(_startStatement, _end, type, start);
+            while (!Consume(_end, TokenType.EndDirective) && ReadAttribute())
+            {
+                SkipWhiteSpace();
+            }
+
+            return true;
+        }
+
+        return ConsumeUntil(_startStatement, _end, type, start, type == TokenType.Statement);
     }
 
     private bool ConsumeInlineSkipWhiteSpace()
@@ -430,7 +445,7 @@ public ref struct Lexer
         {
             Forward();
             start = Position;
-            SkipUntil(current, true);
+            SkipUntil(current, breakOnNewLine: true, allowInline: true);
             AddNode(TokenType.AttributeValue, start);
             Forward();
             return true;
@@ -440,6 +455,7 @@ public ref struct Lexer
 
         while (_offset < _input.Length && !IsInvalidAttributeValueCharacter(Current))
         {
+            ConsumeWebFormsTag();
             Forward();
         }
 
@@ -542,16 +558,19 @@ public ref struct Lexer
             ;
     }
 
-    private bool ConsumeUntil(ReadOnlySpan<char> start, ReadOnlySpan<char> end, TokenType type, TokenPosition offsetStart)
+    private bool ConsumeUntil(ReadOnlySpan<char> start, ReadOnlySpan<char> end, TokenType type, TokenPosition offsetStart, bool toCode = false)
     {
+        _toCode = toCode;
         var textStart = Position;
 
         if (!SkipUntil(start, end))
         {
+            _toCode = false;
             AddNode(type, new TokenRange(offsetStart, Position), CreateString(textStart, Position));
             return true;
         }
 
+        _toCode = false;
         AddNode(type, new TokenRange(offsetStart, Position), CreateString(textStart, Position));
         Forward(end.Length);
         return true;
@@ -647,10 +666,14 @@ public ref struct Lexer
         return false;
     }
 
-    private bool SkipUntil(char untilChar, bool breakOnNewLine = false)
+    private bool SkipUntil(char untilChar, bool breakOnNewLine = false, bool allowInline = false)
     {
+        ConsumeWebFormsTag();
+        
         for (; _offset < _input.Length; Forward())
         {
+            ConsumeWebFormsTag();
+            
             var current = _input[_offset];
 
             if (breakOnNewLine && current is '\n' or '\r')
