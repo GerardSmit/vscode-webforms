@@ -1,20 +1,21 @@
 {
     "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-    "name": "HTML (WebForms)",
-    "scopeName": "source.webforms",
-    "injectionSelector": "L:text.html",
-    "fileTypes": [
-        "aspx",
-        "ascx",
-        "asax",
-        "master"
-    ],
-    "patterns": [
-        { "include": "#comments" },
-        { "include": "#directives" },
-        { "include": "#script-tag-cs" },
-        { "include": "#block-cs" }
-    ],
+	"name": "WebForms (HTML)",
+    "scopeName": "text.html.webforms",
+	"injections": {
+		"text.html.webforms - (meta.embedded | meta.tag), L:((text.html.webforms meta.tag) - (meta.embedded.block.webforms | meta.embedded.line.webforms)), L:(source.js - (meta.embedded.block.webforms | meta.embedded.line.webforms)), L:(source.css - (meta.embedded.block.webforms | meta.embedded.line.webforms))": {
+			"patterns": [
+				{ "include": "#comments" },
+				{ "include": "#directives" },
+				{ "include": "#script-tag-cs" },
+				{ "include": "#block-cs" },
+                { "include": "#script-tag-cs" }
+			]
+		}
+	},
+	"patterns": [
+		{ "include": "text.html.derivative" }
+	],
     "repository": {
         "comments": {
             "name": "comment.block.webforms",

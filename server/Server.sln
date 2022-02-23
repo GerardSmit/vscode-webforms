@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.1.32127.271
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebForms.LanguageServer", "src\WebForms.LanguageServer\WebForms.LanguageServer.csproj", "{D7E9F2AD-8976-42B2-9AA6-5274D118FF3C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebForms.LanguageServer.Tests", "src\WebForms.LanguageServer.Tests\WebForms.LanguageServer.Tests.csproj", "{8680ACE3-A800-4E29-BC4B-1ACD77364164}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D7E9F2AD-8976-42B2-9AA6-5274D118FF3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7E9F2AD-8976-42B2-9AA6-5274D118FF3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7E9F2AD-8976-42B2-9AA6-5274D118FF3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7E9F2AD-8976-42B2-9AA6-5274D118FF3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8680ACE3-A800-4E29-BC4B-1ACD77364164}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8680ACE3-A800-4E29-BC4B-1ACD77364164}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8680ACE3-A800-4E29-BC4B-1ACD77364164}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8680ACE3-A800-4E29-BC4B-1ACD77364164}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C8C79125-5384-4127-855A-AC4353837262}
+	EndGlobalSection
+EndGlobal

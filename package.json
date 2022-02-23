@@ -16,25 +16,24 @@
         "c#"
     ],
     "scripts": {
-        "build": "rollup -c",
+        "build": "dotnet publish server/src/WebForms.LanguageServer/WebForms.LanguageServer.csproj -o extension/bin && rollup -c",
         "watch": "rollup -c -w --env=dev"
     },
     "devDependencies": {
-        "@rollup/plugin-commonjs": "^20.0.0",
+        "@rollup/plugin-commonjs": "^21.0.1",
         "@rollup/plugin-node-resolve": "^13.0.4",
         "@rollup/plugin-typescript": "^8.2.5",
-        "@types/node": "^12.6.9",
+        "@types/node": "^17.0.16",
         "@types/vscode": "^1.1.53",
         "rollup": "^2.56.3"
     },
     "main": "./extension/index",
     "engines": {
-        "vscode": "^1.53.0"
+        "vscode": "^1.52.0"
     },
     "activationEvents": [
-        "onCommand:webforms.action.openResx",
-        "onCommand:webforms.action.openReferencedControl",
-        "onLanguage:html"
+        "onCommand:webforms.toggleInspections",
+        "onLanguage:webforms"
     ],
     "capabilities": {
         "completionProvider": {
@@ -73,10 +72,7 @@
                 "aliases": [
                     "WebForms (C#)"
                 ],
-                "firstLine": "^\\s*<%@"
-            },
-            {
-                "id": "html",
+                "firstLine": "^\\s*<%@",
                 "extensions": [
                     ".aspx",
                     ".ascx",
@@ -96,41 +92,33 @@
             },
             {
                 "language": "webforms",
-                "scopeName": "source.webforms",
+                "scopeName": "text.html.webforms",
                 "path": "./syntaxes/webforms.tmLanguage.json",
-                "injectTo": [
-                    "text.html"
-                ]
+                "embeddedLanguages": {
+                    "text.html": "html",
+                    "source.cs-embedded": "cs-embedded",
+                    "source.sql": "sql",
+                    "text.xml": "xml",
+                    "source.js": "javascript",
+                    "source.json": "json",
+                    "source.css": "css"
+                }
             }
         ],
         "commands": [
             {
-                "command": "webforms.action.openResx",
-                "title": "Open Resource File",
+                "command": "webforms.toggleInspections",
+                "title": "Toggle inspections",
                 "category": "WebForms",
-                "icon": "$(symbol-string)",
-                "enablement": "config.webforms.resources.open"
-            },
-            {
-                "command": "webforms.action.openReferencedControl",
-                "title": "Open referenced user control",
-                "category": "WebForms",
-                "icon": "$(references)"
+                "icon": "$(eye)"
             }
-        ],
-        "menus": {
-            "editor/title": [
-                {
-                    "command": "webforms.action.openResx",
-                    "when": "resourceExtname == .ascx && config.webforms.resources.open",
-                    "group": "navigation"
-                },
-                {
-                    "command": "webforms.action.openReferencedControl",
-                    "when": "resourceExtname == .ascx",
-                    "group": "navigation"
-                }
-            ]
-        }
-    }
+        ]
+    },
+    "dependencies": {
+        "vscode-jsonrpc": "^6.0.0",
+        "vscode-languageclient": "^7.0.0"
+    },
+    "extensionDependencies": [
+        "ms-dotnettools.vscode-dotnet-runtime"
+    ]
 }
