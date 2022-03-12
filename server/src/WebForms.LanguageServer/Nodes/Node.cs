@@ -17,8 +17,10 @@ public abstract class Node
     }
 
     public NodeType Type { get; }
-
+    
     public TokenRange Range { get; set; }
+    
+    public ContainerNode? Parent { get; set; }
 
     public abstract DocumentSymbol CreateSymbol();
 

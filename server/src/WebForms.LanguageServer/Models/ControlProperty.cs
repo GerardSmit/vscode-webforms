@@ -2,6 +2,8 @@
 
 namespace WebForms.Models;
 
+public record IdReference(string? Type);
+
 public class ControlProperty
 {
     private readonly PropertyDefinition _property;
@@ -16,6 +18,12 @@ public class ControlProperty
         foreach (var attribute in property.CustomAttributes)
         {
             var value = attribute.ConstructorArguments.FirstOrDefault().Value?.ToString();
+
+            if (attribute.AttributeType.Name == "IDReferencePropertyAttribute")
+            {
+                IdReference = new IdReference(value);
+                continue;
+            }
 
             if (value == null)
             {
@@ -48,6 +56,8 @@ public class ControlProperty
     public Control Control { get; }
 
     public TypeReference Type => _property.PropertyType;
+    
+    public IdReference? IdReference { get; }
 
     public string Description { get; } = "";
 

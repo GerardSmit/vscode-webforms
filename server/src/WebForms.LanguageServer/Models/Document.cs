@@ -21,6 +21,8 @@ public enum ControlReferenceSource
 
 public record struct ControlReference(Control Control, ControlReferenceSource Source);
 
+public record struct ControlKey(string Namespace, string Name);
+
 public class Document
 {
     private readonly ILanguageServerFacade _languageServer;
@@ -48,9 +50,11 @@ public class Document
 
     public List<int> Lines { get; set; } = new();
 
-    public Dictionary<string, ControlReference> Controls { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<ControlKey, ControlReference> Controls { get; set; } = new(ControlKeyCompare.OrdinalIgnoreCase);
     
     public TokenString Code { get; set; }
+
+    public Dictionary<string, HtmlNode> Ids { get; set; } = new();
 
     public string Text
     {
@@ -59,32 +63,35 @@ public class Document
         {
             _text = value;
             IsDirty = true;
-
-            var parser = new Parser();
-            var lexer = new Lexer(value);
-
-            parser.Parse(ref lexer);
-            Node = parser.Root;
-
-            Lines = lexer.Lines;
-            Code = lexer.Code;
-
-            // Hit ranges
-            var hitRanges = new List<HitRange>();
-            var collection = new HitRangeCollection(hitRanges);
-
-            foreach (var node in Node.AllNodes)
-            {
-                collection.CurrentNode = node;
-                node.AddRanges(collection);
-            }
-
-            hitRanges.Sort(HitRangeComparer.Instance);
-            HitRanges = hitRanges;
-
-            // Controls
-            UpdateDiagnostics();
+            Update();
         }
+    }
+
+    public void Update()
+    {
+        var parser = new Parser();
+        var lexer = new Lexer(Text);
+
+        parser.Parse(ref lexer);
+        Node = parser.Root;
+
+        Lines = lexer.Lines;
+        Code = lexer.Code;
+
+        // Hit ranges
+        var hitRanges = new List<HitRange>();
+        var collection = new HitRangeCollection(hitRanges);
+
+        foreach (var node in Node.AllNodes)
+        {
+            collection.CurrentNode = node;
+            node.AddRanges(collection);
+        }
+
+        hitRanges.Sort(HitRangeComparer.Instance);
+        HitRanges = hitRanges;
+        
+        UpdateDiagnostics();
     }
 
     public void UpdateProject()
@@ -107,57 +114,115 @@ public class Document
             
             foreach (var control in controls)
             {
-                Controls[tagPrefix + ":" + control.Name] = new ControlReference(control, ControlReferenceSource.Project);
+                Controls[new ControlKey(tagPrefix, control.Name)] = new ControlReference(control, ControlReferenceSource.Project);
             }
         }
+
+        Update();
     }
 
-    public void UpdateDiagnostics()
+    private void UpdateDiagnostics()
     {
-        var directive = Node.Directives.FirstOrDefault(i => i.DirectiveType is DirectiveType.Control or DirectiveType.Page);
+        var directive = Node.AllDirectives.FirstOrDefault(i => i.DirectiveType is DirectiveType.Control or DirectiveType.Page);
 
-        if (directive != null && directive.Attributes.TryGetValue("inherits", out var inherits))
-        {
-            Type = Project?.Resolver.ResolveType(inherits);
-        }
-        
+        Type = directive != null && directive.Attributes.TryGetValue("inherits", out var inherits)
+            ? Project?.Resolver.ResolveType(inherits)
+            : null;
+
         var diagnostics = new List<Diagnostic>();
 
         RemoveControls(ControlReferenceSource.Document);
 
-        foreach (var element in Node.AllNodes)
+        foreach (var directiveNode in Node.AllNodes.OfType<DirectiveNode>())
         {
-            if (element is DirectiveNode directiveNode)
+            if (directiveNode.DirectiveType != DirectiveType.Register ||
+                !directiveNode.Attributes.TryGetValue("tagprefix", out var tagPrefix))
             {
-                if (directiveNode.DirectiveType == DirectiveType.Register &&
-                    directiveNode.Attributes.TryGetValue("tagprefix", out var tagPrefix))
+                continue;
+            }
+
+            if (!directiveNode.Attributes.TryGetValue("namespace", out var ns) ||
+                Project is not { } project ||
+                !project.NamespaceControls.TryGetValue(ns.Value, out var controls))
+            {
+                continue;
+            }
+            
+            foreach (var control in controls)
+            {
+                Controls[new ControlKey(tagPrefix.Value, control.Name)] = new ControlReference(control, ControlReferenceSource.Document);
+            }
+        }
+
+        CodeType? type = null;
+        var container = new TypeContainer(Project?.Resolver, this);
+        
+        Ids.Clear();
+        
+        if (Type != null)
+        {
+            var children = Node.Children;
+            
+            type = container.Get(Type);
+
+            AddControls(children, type, container);
+        }
+        
+        foreach (var expressionNode in Node.AllNodes.OfType<ExpressionNode>())
+        {
+            var visitor = new ExpressionVisitor(this, diagnostics, expressionNode.Text.Range, expressionNode)
+            {
+                TypeContainer = container
+            };
+
+            if (type != null)
+            {
+                visitor.Inspect(type, expressionNode.Expression);
+            }
+
+            AddDiagnostics(expressionNode.Expression.GetDiagnostics(), diagnostics, visitor);
+        }
+
+        foreach (var element in Node.AllNodes.OfType<HtmlNode>())
+        {
+            var control = element.CodeType?.Control;
+
+            if (control == null)
+            {
+                continue;
+            }
+
+            foreach (var (key, attribute) in element.Attributes)
+            {
+                if (control.Properties.TryGetValue(key, out var property) &&
+                    property.IdReference is {} reference)
                 {
-                    if (directiveNode.Attributes.TryGetValue("namespace", out var ns) &&
-                        Project is {} project &&
-                        project.NamespaceControls.TryGetValue(ns.Value, out var controls))
+                    if (!Ids.TryGetValue(attribute.Value, out var idReference))
                     {
-                        foreach (var control in controls)
+                        diagnostics.Add(new Diagnostic
                         {
-                            Controls[tagPrefix.Value + ":" + control.Name] = new ControlReference(control, ControlReferenceSource.Document);
-                        }
+                            Range = attribute.Range,
+                            Message = $"Control with ID '{attribute}' was not found in this file",
+                            Severity = Warning
+                        });
+                    }
+                    else if (idReference.CodeType is { } idType &&
+                             reference.Type is { } requiredType &&
+                             !idType.Type.IsAssignableTo(requiredType))
+                    {
+                        diagnostics.Add(new Diagnostic
+                        {
+                            Range = attribute.Range,
+                            Message = $"Expected type '{requiredType}', but the control with ID '{attribute}' is type '{idType.FullName}'",
+                            Severity = Warning
+                        });
                     }
                 }
-            }
-            else if (element is ExpressionNode expressionNode)
-            {
-                var visitor = new ExpressionVisitor(this, diagnostics, expressionNode.Text.Range);
-
-                if (Type != null)
-                {
-                    visitor.Inspect(Type, expressionNode.Expression);
-                }
-
-                AddDiagnostics(expressionNode.Expression.GetDiagnostics(), diagnostics, visitor);
             }
         }
 
         var tree = SyntaxFactory.ParseSyntaxTree(Code);
-        var rootVisitor = new ExpressionVisitor(this, diagnostics, Code.Range);
+        var rootVisitor = new ExpressionVisitor(this, diagnostics, Code.Range, Node);
 
         AddDiagnostics(tree.GetDiagnostics(), diagnostics, rootVisitor);
         
@@ -166,6 +231,50 @@ public class Document
             Diagnostics = diagnostics,
             Uri = Uri
         });
+    }
+
+    private void AddControls(IEnumerable<Node> children, CodeType type, TypeContainer container, CodeType? parent = null)
+    {
+        foreach (var element in children.OfType<HtmlNode>())
+        {
+            CodeType controlType;
+            CodeType? nextParent;
+            string? name = null;
+            
+            if ((element.RunAt == RunAt.Server || parent != null) &&
+                element.StartTag.Namespace is { } ns &&
+                Controls.TryGetValue(new ControlKey(ns, element.StartTag.Name), out var reference))
+            {
+                controlType = container.Get(reference.Control.Type);
+                nextParent = reference.Control.ChildrenAsProperties ? controlType : null;
+            }
+            else if (parent?.Properties.FirstOrDefault(i => i.Name.Equals(element.Name.Value, StringComparison.OrdinalIgnoreCase)) is var (_, codeType))
+            {
+                controlType = codeType;
+                nextParent = codeType;
+                name = element.Name.Value;
+            }
+            else
+            {
+                AddControls(element.Children, type, container, null);
+                continue;
+            }
+
+            element.CodeType = controlType;
+
+            if (name == null && element.Attributes.TryGetValue("id", out var id))
+            {
+                name = id;
+                type.CustomProperties.Add(
+                    new CodeTypeProperty(id.Value, controlType)
+                );
+                Ids[id] = element;
+            }
+            
+            element.ElementName = name;
+            
+            AddControls(element.Children, type, container, nextParent);
+        }
     }
 
     private static void AddDiagnostics(IEnumerable<Microsoft.CodeAnalysis.Diagnostic> statementNode, List<Diagnostic> diagnostics, ExpressionVisitor visitor)

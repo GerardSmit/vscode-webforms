@@ -2,6 +2,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using WebForms.Collections;
 using WebForms.Models;
+using WebForms.Roslyn;
 
 namespace WebForms.Nodes;
 
@@ -16,6 +17,9 @@ public class HtmlTagNode
 
 public class HtmlNode : ContainerNode, IAttributeNode
 {
+    private const int TypeTag = 0;
+    private const int TypeAttribute = 0;
+    
     public HtmlNode()
         : base(NodeType.Html)
     {
@@ -32,6 +36,10 @@ public class HtmlNode : ContainerNode, IAttributeNode
     public RunAt RunAt { get; set; } = RunAt.Client;
 
     public Dictionary<TokenString, TokenString> Attributes { get; set; } = new(AttributeCompare.IgnoreCase);
+
+    public CodeType? CodeType { get; set; }
+    
+    public string? ElementName { get; set; }
 
     public override DocumentSymbol CreateSymbol()
     {
@@ -62,19 +70,19 @@ public class HtmlNode : ContainerNode, IAttributeNode
 
         if (EndTag != null)
         {
-            ranges.Add(new HitRange(EndTag.Name.Range));
+            ranges.Add(new HitRange(EndTag.Name.Range, TypeTag));
         }
 
         foreach (var (key, _) in Attributes)
         {
-            ranges.Add(new HitRange(key.Range, 1, key));
+            ranges.Add(new HitRange(key.Range, TypeAttribute, key));
         }
     }
 
     public override void Highlight(List<DocumentHighlight> items, HitRange hitRange, Document document,
         Position position)
     {
-        if (hitRange.Type == 1)
+        if (hitRange.Type == TypeAttribute)
         {
             return;
         }
@@ -99,7 +107,7 @@ public class HtmlNode : ContainerNode, IAttributeNode
         string newText,
         Document document)
     {
-        if (hitRange.Type == 1)
+        if (hitRange.Type == TypeAttribute)
         {
             return;
         }
@@ -127,17 +135,14 @@ public class HtmlNode : ContainerNode, IAttributeNode
     public override Hover? Hover(List<DocumentHighlight> items, HitRange hit, Document document,
         Position position)
     {
-
-        if (RunAt == RunAt.Client ||
-            StartTag.Namespace is not {} ns ||
-            !document.Controls.TryGetValue(StartTag.Namespace + ":" + StartTag.Name, out var reference))
+        if (CodeType == null)
         {
             return null;
         }
 
-        if (hit.Type == 1 && hit.Value is {} name)
+        if (hit.Type == TypeAttribute && hit.Value is {} name)
         {
-            if (reference.Control.Properties.TryGetValue(name, out var property))
+            if (CodeType.Control?.Properties.TryGetValue(name, out var property) ?? false)
             {
                 return new Hover
                 {
@@ -151,16 +156,12 @@ public class HtmlNode : ContainerNode, IAttributeNode
 
             return null;
         }
-
+        
         return new Hover
         {
-            Range = ns.Range.WithEnd(StartTag.Name.Range.End),
+            Range = (Namespace?.Range ?? Name.Range).WithEnd(Name.Range.End),
             Contents = new MarkedStringsOrMarkupContent(
-                new MarkupContent
-                {
-                    Kind = MarkupKind.Markdown,
-                    Value = $"**{reference.Control.Assembly} - {reference.Control.Name}**"
-                }
+                new MarkedString("csharp", $"{CodeType.Type.FullName} {ElementName ?? "_"};")
             )
         };
     }

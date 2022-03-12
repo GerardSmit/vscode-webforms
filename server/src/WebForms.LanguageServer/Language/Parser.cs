@@ -8,7 +8,7 @@ namespace WebForms;
 public class Parser
 {
     private readonly ParserContainer _container = new();
-    
+
     public RootNode Root => _container.Root;
 
     public void Parse(ref Lexer lexer)
@@ -50,7 +50,7 @@ public class Parser
             Expression = SyntaxFactory.ParseExpression(token.Text)
         };
 
-        _container.Add(element);
+        _container.AddExpression(element);
     }
 
     private void ConsumeStatement(Token token)
@@ -61,7 +61,7 @@ public class Parser
             Text = token.Text
         };
 
-        _container.Add(element);
+        _container.AddStatement(element);
     }
 
     private void ConsumeDirective(ref Lexer lexer, TokenPosition startPosition)
@@ -98,7 +98,7 @@ public class Parser
             else if (next.Type == TokenType.EndDirective)
             {
                 element.Range = element.Range.WithEnd(next.Range.End);
-                _container.Add(element);
+                _container.AddDirective(element);
                 break;
             }
             else

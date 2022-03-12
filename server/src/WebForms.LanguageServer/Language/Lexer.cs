@@ -668,11 +668,22 @@ public ref struct Lexer
 
     private bool SkipUntil(char untilChar, bool breakOnNewLine = false, bool allowInline = false)
     {
-        ConsumeWebFormsTag();
-        
-        for (; _offset < _input.Length; Forward())
+        if (allowInline)
         {
             ConsumeWebFormsTag();
+        }
+
+        for (; _offset < _input.Length; Forward())
+        {
+            if (allowInline)
+            {
+                ConsumeWebFormsTag();
+            }
+
+            if (_offset >= _input.Length)
+            {
+                break;
+            }
             
             var current = _input[_offset];
 

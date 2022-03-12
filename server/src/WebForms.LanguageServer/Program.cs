@@ -5,6 +5,8 @@ using WebForms;
 using WebForms.Handlers;
 using WebForms.Services;
 
+ System.Diagnostics.Debugger.Launch();
+
 var server = await LanguageServer.From(options =>
 {
     options

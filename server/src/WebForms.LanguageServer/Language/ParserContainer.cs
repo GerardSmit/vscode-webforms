@@ -18,19 +18,22 @@ internal class ParserContainer
 
     public HtmlNode? Current { get; private set; }
 
-    public void Add(Node node)
+    private void Add(Node node)
     {
-        if (node is DirectiveNode directiveNode)
-        {
-            Root.Directives.Add(directiveNode);
-        }
-        
         Root.AllNodes.Add(node);
         Parent.Children.Add(node);
+        node.Parent = Parent;
+    }
+
+    public void AddDirective(DirectiveNode node)
+    {
+        Root.AllDirectives.Add(node);
+        Add(node);
     }
 
     public void Push(HtmlNode node)
     {
+        Root.AllHtmlNodes.Add(node);
         Add(node);
         
         _stack.Push(node);
@@ -49,5 +52,15 @@ internal class ParserContainer
         Current = _stack.Count > 0 ? _stack.Peek() : null;
         Parent = (ContainerNode?) Current ?? Root;
         return current;
+    }
+
+    public void AddStatement(StatementNode node)
+    {
+        Add(node);
+    }
+
+    public void AddExpression(ExpressionNode node)
+    {
+        Add(node);
     }
 }

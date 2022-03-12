@@ -109,7 +109,6 @@ public sealed class Project : IDisposable
         foreach (var document in Documents)
         {
             document.UpdateProject();
-            document.UpdateDiagnostics();
         }
     }
 

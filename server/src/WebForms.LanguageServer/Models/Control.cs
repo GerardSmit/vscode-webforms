@@ -4,25 +4,31 @@ namespace WebForms.Models;
 
 public class Control
 {
-    private readonly TypeDefinition _type;
+    private readonly Dictionary<string, CustomAttribute> _attributes = new();
 
     public Control(AssemblyInfo assembly, TypeDefinition type)
     {
         Assembly = assembly;
-        _type = type;
+        Type = type;
 
-        AddProperties(type);
+        Scan(type);
+
+        ChildrenAsProperties = true;// _attributes.TryGetValue("System.Web.UI.ParseChildrenAttribute", out var parseChildren) && (parseChildren.ConstructorArguments.FirstOrDefault().Value as bool? ?? false);
     }
+    
+    public bool ChildrenAsProperties { get; set; }
 
     public AssemblyInfo Assembly { get; }
+    
+    public TypeDefinition Type { get; }
 
-    public string Namespace => _type.Namespace;
+    public string Namespace => Type.Namespace;
 
-    public string Name => _type.Name;
+    public string Name => Type.Name;
 
     public Dictionary<string, ControlProperty> Properties { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    private void AddProperties(TypeDefinition? type)
+    private void Scan(TypeDefinition? type)
     {
         while (type != null)
         {
@@ -31,6 +37,16 @@ public class Control
                 if (!Properties.ContainsKey(property.Name))
                 {
                     Properties.Add(property.Name, new ControlProperty(this, property));
+                }
+            }
+
+            foreach (var attribute in type.CustomAttributes)
+            {
+                var name = attribute.AttributeType.FullName;
+                
+                if (!_attributes.ContainsKey(name))
+                {
+                    _attributes.Add(name, attribute);
                 }
             }
 

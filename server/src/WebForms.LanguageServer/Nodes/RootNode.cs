@@ -9,7 +9,9 @@ public class RootNode : ContainerNode
     {
     }
 
-    public List<DirectiveNode> Directives { get; set; } = new();
+    public List<DirectiveNode> AllDirectives { get; set; } = new();
+
+    public List<HtmlNode> AllHtmlNodes { get; set; } = new();
 
     public List<Node> AllNodes { get; set; } = new();
 
