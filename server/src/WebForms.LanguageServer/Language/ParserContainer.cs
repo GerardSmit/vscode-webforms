@@ -12,6 +12,13 @@ internal class ParserContainer
         Parent = Root;
     }
 
+    public ParserContainer(ParserContainer parent)
+    {
+        Root = parent.Root;
+        Parent = parent.Parent;
+        Current = parent.Current;
+    }
+
     public RootNode Root { get; }
 
     public ContainerNode Parent { get; private set; }

@@ -32,6 +32,10 @@ public class LexerTest
         new[] { Expression }
     )]
     [InlineData(
+        @"<%-- Test --%>",
+        new[] { Comment }
+    )]
+    [InlineData(
         @"<%# Test %>",
         new[] { EvalExpression }
     )]

@@ -1,4 +1,6 @@
-﻿using Microsoft.CodeAnalysis.CSharp;
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Text;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using OmniSharp.Extensions.LanguageServer.Protocol;
@@ -9,6 +11,7 @@ using WebForms.Collections;
 using WebForms.Nodes;
 using WebForms.Roslyn;
 using static OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity;
+using Diagnostic = OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic;
 using DiagnosticSeverity = Microsoft.CodeAnalysis.DiagnosticSeverity;
 
 namespace WebForms.Models;
@@ -69,7 +72,8 @@ public class Document
 
     public void Update()
     {
-        var parser = new Parser();
+        var diagnostics = new List<Diagnostic>();
+        var parser = new Parser(diagnostics);
         var lexer = new Lexer(Text);
 
         parser.Parse(ref lexer);
@@ -91,7 +95,7 @@ public class Document
         hitRanges.Sort(HitRangeComparer.Instance);
         HitRanges = hitRanges;
         
-        UpdateDiagnostics();
+        UpdateDiagnostics(diagnostics);
     }
 
     public void UpdateProject()
@@ -121,15 +125,13 @@ public class Document
         Update();
     }
 
-    private void UpdateDiagnostics()
+    private void UpdateDiagnostics(List<Diagnostic> diagnostics)
     {
         var directive = Node.AllDirectives.FirstOrDefault(i => i.DirectiveType is DirectiveType.Control or DirectiveType.Page);
 
         Type = directive != null && directive.Attributes.TryGetValue("inherits", out var inherits)
             ? Project?.Resolver.ResolveType(inherits)
             : null;
-
-        var diagnostics = new List<Diagnostic>();
 
         RemoveControls(ControlReferenceSource.Document);
 
@@ -165,22 +167,7 @@ public class Document
             
             type = container.Get(Type);
 
-            AddControls(children, type, container);
-        }
-        
-        foreach (var expressionNode in Node.AllNodes.OfType<ExpressionNode>())
-        {
-            var visitor = new ExpressionVisitor(this, diagnostics, expressionNode.Text.Range, expressionNode)
-            {
-                TypeContainer = container
-            };
-
-            if (type != null)
-            {
-                visitor.Inspect(type, expressionNode.Expression);
-            }
-
-            AddDiagnostics(expressionNode.Expression.GetDiagnostics(), diagnostics, visitor);
+            AddControls(children, type, container, diagnostics);
         }
 
         foreach (var element in Node.AllNodes.OfType<HtmlNode>())
@@ -221,11 +208,21 @@ public class Document
             }
         }
 
-        var tree = SyntaxFactory.ParseSyntaxTree(Code);
-        var rootVisitor = new ExpressionVisitor(this, diagnostics, Code.Range, Node);
+        foreach (var expressionNode in Node.AllNodes.OfType<ExpressionNode>())
+        {
+            AddDiagnostics(expressionNode.Expression.GetDiagnostics(), diagnostics, expressionNode.Range);
+        }
 
-        AddDiagnostics(tree.GetDiagnostics(), diagnostics, rootVisitor);
-        
+        var tree = SyntaxFactory.ParseSyntaxTree(Code, new CSharpParseOptions(documentationMode: DocumentationMode.Diagnose));
+
+        AddDiagnostics(tree.GetDiagnostics(), diagnostics, Code.Range);
+
+        if (type is not null)
+        {
+            var documentVisitor = new DocumentVisitor(Node, this, Code.Range, type, container, diagnostics);
+            documentVisitor.Visit(tree.GetRoot());
+        }
+
         _languageServer.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
         {
             Diagnostics = diagnostics,
@@ -233,7 +230,8 @@ public class Document
         });
     }
 
-    private void AddControls(IEnumerable<Node> children, CodeType type, TypeContainer container, CodeType? parent = null)
+    private void AddControls(IEnumerable<Node> children, CodeType type, TypeContainer container,
+        List<Diagnostic> diagnostics, CodeType? parent = null)
     {
         foreach (var element in children.OfType<HtmlNode>())
         {
@@ -256,7 +254,8 @@ public class Document
             }
             else
             {
-                AddControls(element.Children, type, container, null);
+                AddControlWarning(diagnostics, element);
+                AddControls(element.Children, type, container, diagnostics);
                 continue;
             }
 
@@ -273,11 +272,63 @@ public class Document
             
             element.ElementName = name;
             
-            AddControls(element.Children, type, container, nextParent);
+            AddControls(element.Children, type, container, diagnostics, nextParent);
         }
     }
 
-    private static void AddDiagnostics(IEnumerable<Microsoft.CodeAnalysis.Diagnostic> statementNode, List<Diagnostic> diagnostics, ExpressionVisitor visitor)
+    private void AddControlWarning(ICollection<Diagnostic> diagnostics, HtmlNode element)
+    {
+        if (element.RunAt != RunAt.Server || element.StartTag.Namespace is not { } ns)
+        {
+            return;
+        }
+
+        if (Controls.Any(i => i.Key.Namespace.Equals(ns.Value, StringComparison.OrdinalIgnoreCase)))
+        {
+            diagnostics.Add(new Diagnostic
+            {
+                Range = element.Name.Range,
+                Message = $"Control '{element.Name}' not found in namespace '{ns}'",
+                Severity = Warning
+            });
+        }
+        else
+        {
+            diagnostics.Add(new Diagnostic
+            {
+                Range = ns.Range,
+                Message = $"Namespace '{ns.Value}' is not defined in this document or web.config",
+                Severity = Warning
+            });
+        }
+    }
+
+    public TokenRange GetRange(TokenRange range, TextSpan span)
+    {
+        return new TokenRange(
+            GetPosition(range, span.Start),
+            GetPosition(range, span.End)
+        );
+    }
+
+    private TokenPosition GetPosition(TokenRange range, int offset)
+    {
+        offset += range.Start.Offset;
+
+        for (var i = range.End.Line; i >= 0; i--)
+        {
+            var lineOffset = Lines[i];
+
+            if (offset >= lineOffset)
+            {
+                return new TokenPosition(offset, i, offset - lineOffset);
+            }
+        }
+
+        return default;
+    }
+
+    private void AddDiagnostics(IEnumerable<Microsoft.CodeAnalysis.Diagnostic> statementNode, List<Diagnostic> diagnostics, TokenRange range)
     {
         foreach (var diagnostic in statementNode)
         {
@@ -285,11 +336,11 @@ public class Document
             {
                 continue;
             }
-            
+
             diagnostics.Add(new Diagnostic
             {
                 Code = diagnostic.Id,
-                Range = visitor.GetRange(diagnostic.Location.SourceSpan),
+                Range = GetRange(range, diagnostic.Location.SourceSpan),
                 Message = diagnostic.GetMessage(),
                 Severity = diagnostic.Severity switch
                 {

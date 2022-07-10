@@ -15,6 +15,8 @@ public class RootNode : ContainerNode
 
     public List<Node> AllNodes { get; set; } = new();
 
+    public Dictionary<int, ExpressionNode> Expressions { get; } = new();
+
     public override DocumentSymbol CreateSymbol()
     {
         return new DocumentSymbol

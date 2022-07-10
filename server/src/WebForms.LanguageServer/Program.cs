@@ -5,7 +5,7 @@ using WebForms;
 using WebForms.Handlers;
 using WebForms.Services;
 
- System.Diagnostics.Debugger.Launch();
+// System.Diagnostics.Debugger.Launch();
 
 var server = await LanguageServer.From(options =>
 {
@@ -14,6 +14,7 @@ var server = await LanguageServer.From(options =>
         .WithOutput(Console.OpenStandardOutput())
         .WithHandler<HighlightHandler>()
         .WithHandler<RenameHandler>()
+        .WithHandler<PrepareRenameHandler>()
         .WithHandler<TextDocumentHandler>()
         .WithHandler<DocumentSymbolHandler>()
         .WithHandler<HoverHandler>()
@@ -27,7 +28,12 @@ var server = await LanguageServer.From(options =>
         {
             if (request.Capabilities?.TextDocument != null)
             {
-                request.Capabilities.TextDocument.Rename = new RenameCapability {PrepareSupport = true};
+                request.Capabilities.TextDocument.Rename = new RenameCapability
+                {
+                    PrepareSupport = true,
+                    DynamicRegistration = true
+                };
+
                 request.Capabilities.TextDocument.DocumentHighlight = new DocumentHighlightCapability();
             }
 

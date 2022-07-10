@@ -6,14 +6,19 @@ namespace WebForms.Nodes;
 
 public class ExpressionNode : Node
 {
-    public ExpressionNode()
+    public ExpressionNode(int id)
         : base(NodeType.Expression)
     {
+        Id = id;
     }
+
+    public int Id { get; }
 
     public TokenString Text { get; set; }
 
     public ExpressionSyntax Expression { get; set; } = null!;
+
+    public bool IsEval { get; set; }
 
     public override DocumentSymbol CreateSymbol()
     {

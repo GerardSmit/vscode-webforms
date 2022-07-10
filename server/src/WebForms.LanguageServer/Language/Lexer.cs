@@ -8,14 +8,14 @@ public ref struct Lexer
     private static readonly ReadOnlyMemory<char> StartDocType = "<!DOCTYPE".ToCharArray();
     private static readonly ReadOnlyMemory<char> StartStatement = "<%".ToCharArray();
     private static readonly ReadOnlyMemory<char> End = "%>".ToCharArray();
+    private static readonly ReadOnlyMemory<char> CommentEnd = "--%>".ToCharArray();
     private static readonly ReadOnlyMemory<char> StartComment = "<!--".ToCharArray();
     private static readonly ReadOnlyMemory<char> EndComment = "-->".ToCharArray();
     private static readonly ReadOnlyMemory<char> RunAt = "runat".ToCharArray();
 
-    private readonly StringBuilder _codeBuilder;
-
     private readonly ReadOnlySpan<char> _startStatement;
     private readonly ReadOnlySpan<char> _end;
+    private readonly ReadOnlySpan<char> _endServerComment;
     private readonly ReadOnlySpan<char> _startDocType;
     private readonly ReadOnlySpan<char> _startComment;
     private readonly ReadOnlySpan<char> _endComment;
@@ -32,7 +32,7 @@ public ref struct Lexer
 
     public Lexer(ReadOnlySpan<char> input)
     {
-        _codeBuilder = new StringBuilder(input.Length);
+        CodeBuilder = new StringBuilder(input.Length);
         _nodes = new List<Token>();
         _startStatement = StartStatement.Span;
         _startDocType = StartDocType.Span;
@@ -40,6 +40,7 @@ public ref struct Lexer
         _endComment = EndComment.Span;
         _runAt = RunAt.Span;
         _end = End.Span;
+        _endServerComment = CommentEnd.Span;
         _input = input;
         _line = 0;
         _column = 0;
@@ -49,11 +50,13 @@ public ref struct Lexer
         _toCode = false;
     }
 
+    public StringBuilder CodeBuilder { get; }
+
     public List<int> Lines { get; } = new() { 0 };
 
     public TokenPosition Position => new(_offset, _line, _column);
 
-    public TokenString Code => new(_codeBuilder.ToString(), new TokenRange(default, Position));
+    public TokenString Code => new(CodeBuilder.ToString(), new TokenRange(default, Position));
     
     private char Current => _offset < _input.Length ? _input[_offset] : '\0';
 
@@ -85,17 +88,17 @@ public ref struct Lexer
 
         if (isNewLine || _toCode)
         {
-            _codeBuilder.Append(current);
+            CodeBuilder.Append(current);
         }
         else if (length == 1)
         {
-            _codeBuilder.Append(' ');
+            CodeBuilder.Append(' ');
         }
         else
         {
             for (var i = 0; i < length; i++)
             {
-                _codeBuilder.Append(' ');
+                CodeBuilder.Append(' ');
             }
         }
 
@@ -208,6 +211,18 @@ public ref struct Lexer
         return true;
     }
 
+    private bool IsWebFormsElement()
+    {
+        if (Current != '<')
+        {
+            return false;
+        }
+
+        var slice = _input[_offset..];
+        var last = slice.IndexOf('>');
+        return last != -1 && slice[..last].Contains(_runAt, StringComparison.OrdinalIgnoreCase);
+    }
+
     private bool ConsumeWebFormsTag()
     {
         if (Current != '<')
@@ -220,25 +235,9 @@ public ref struct Lexer
 
     private bool ConsumeElement(bool requireRunAt = false)
     {
-        if (requireRunAt)
+        if (requireRunAt && !IsWebFormsElement())
         {
-            if (Current != '<')
-            {
-                return false;
-            }
-
-            var slice = _input[_offset..];
-            var last = slice.IndexOf('>');
-
-            if (last == -1)
-            {
-                return false;
-            }
-
-            if (!slice[..last].Contains(_runAt, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
+            return false;
         }
 
         var start = Position;
@@ -367,8 +366,15 @@ public ref struct Lexer
         }
 
         var type = TokenType.Statement;
+        var end = _end;
 
-        if (Consume('#') || Consume(':') || Consume('='))
+        if (Peek('-') && Peek('-', 1))
+        {
+            Forward(2);
+            type = TokenType.Comment;
+            end = _endServerComment;
+        }
+        else if (Consume(':') || Consume('='))
         {
             type = TokenType.Expression;
         }
@@ -389,7 +395,7 @@ public ref struct Lexer
             return true;
         }
 
-        return ConsumeUntil(_startStatement, _end, type, start, type == TokenType.Statement);
+        return ConsumeUntil(_startStatement, end, type, start, type == TokenType.Statement);
     }
 
     private bool ConsumeInlineSkipWhiteSpace()
@@ -439,14 +445,44 @@ public ref struct Lexer
         Forward();
 
         ConsumeInlineSkipWhiteSpace();
-        var current = Current;
+        var token = Current;
 
-        if (current is '"' or '\'')
+        if (token is '"' or '\'')
         {
             Forward();
             start = Position;
-            SkipUntil(current, breakOnNewLine: true, allowInline: true);
-            AddNode(TokenType.AttributeValue, start);
+
+            for (; _offset < _input.Length; Forward())
+            {
+                if (Peek(_startStatement) || IsWebFormsElement())
+                {
+                    if (_offset > start.Offset)
+                    {
+                        AddNode(TokenType.AttributeValue, start);
+                    }
+
+                    ConsumeWebFormsTag();
+                    start = Position;
+                }
+
+                if (_offset >= _input.Length)
+                {
+                    break;
+                }
+
+                var current = _input[_offset];
+
+                if (current is '\n' or '\r' || current == token)
+                {
+                    break;
+                }
+            }
+
+            if (_offset > start.Offset)
+            {
+                AddNode(TokenType.AttributeValue, start);
+            }
+
             Forward();
             return true;
         }
@@ -625,6 +661,12 @@ public ref struct Lexer
     private bool Peek(char c)
     {
         return Current == c;
+    }
+
+    private bool Peek(char c, int offset)
+    {
+        var index = _offset + offset;
+        return index < _input.Length && _input[index] == c;
     }
 
     private bool Peek(ReadOnlySpan<char> data, bool ignoreCase = false)

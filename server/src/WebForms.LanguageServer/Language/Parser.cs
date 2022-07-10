@@ -1,13 +1,25 @@
 ﻿using System.Text;
 using Microsoft.CodeAnalysis.CSharp;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using WebForms.Models;
 using WebForms.Nodes;
+using WebForms.Roslyn;
 
 namespace WebForms;
 
 public class Parser
 {
-    private readonly ParserContainer _container = new();
+    private readonly List<Diagnostic> _diagnostics;
+    private readonly ParserContainer _rootContainer = new();
+    private ParserContainer _container;
+    private ParserContainer? _headerContainer;
+    private int _expressionId;
+
+    public Parser(List<Diagnostic> diagnostics)
+    {
+        _diagnostics = diagnostics;
+        _container = _rootContainer;
+    }
 
     public RootNode Root => _container.Root;
 
@@ -24,7 +36,10 @@ public class Parser
         switch (token.Type)
         {
             case TokenType.Expression:
-                ConsumeExpression(token);
+                ConsumeExpression(ref lexer, token, false);
+                break;
+            case TokenType.EvalExpression:
+                ConsumeExpression(ref lexer, token, true);
                 break;
             case TokenType.Statement:
                 ConsumeStatement(token);
@@ -41,16 +56,28 @@ public class Parser
         }
     }
 
-    private void ConsumeExpression(Token token)
+    private void ConsumeExpression(ref Lexer lexer, Token token, bool isEval)
     {
-        var element = new ExpressionNode
+        var id = _expressionId++;
+        var element = new ExpressionNode(id)
         {
             Range = token.Range,
             Text = token.Text,
-            Expression = SyntaxFactory.ParseExpression(token.Text)
+            Expression = SyntaxFactory.ParseExpression(token.Text),
+            IsEval = isEval
         };
 
         _container.AddExpression(element);
+        Root.Expressions[id] = element;
+
+        var codeBuilder = lexer.CodeBuilder;
+        var str = id.ToString();
+        var length = DocumentVisitor.ExpressionStart.Length + DocumentVisitor.ExpressionEnd.Length + str.Length;
+
+        codeBuilder.Length -= length;
+        codeBuilder.Append(DocumentVisitor.ExpressionStart);
+        codeBuilder.Append(str);
+        codeBuilder.Append(DocumentVisitor.ExpressionEnd);
     }
 
     private void ConsumeStatement(Token token)
@@ -170,6 +197,24 @@ public class Parser
         }
 
         element.StartTag.Range = element.Range;
+
+        switch (name.Text.Value)
+        {
+            case "HeaderTemplate":
+                _container = _headerContainer = new ParserContainer(_rootContainer);
+                break;
+            case "FooterTemplate" when _headerContainer is not null:
+                _container = _headerContainer;
+                break;
+            case "FooterTemplate":
+                _diagnostics.Add(new Diagnostic
+                {
+                    Range = element.Name.Range,
+                    Message = "Footer template should be below the header template",
+                    Severity = DiagnosticSeverity.Warning
+                });
+                break;
+        }
     }
 
     private void ConsumeCloseTag(ref Lexer lexer, TokenPosition startPosition)
@@ -185,6 +230,11 @@ public class Parser
         if (lexer.Peek() is not {Type: TokenType.ElementName} name)
         {
             return;
+        }
+
+        if (name.Text.Value is "HeaderTemplate" or "FooterTemplate")
+        {
+            _container = _rootContainer;
         }
 
         var endPosition = name.Range.End;
@@ -210,17 +260,25 @@ public class Parser
 
         if (pop.Name != name.Text || pop.Namespace != endNamespace)
         {
+            _diagnostics.Add(new Diagnostic
+            {
+                Range = endNamespace is null
+                    ? name.Range
+                    : endNamespace.Value.Range.WithEnd(name.Range.End),
+                Message = $"Expected end-tag {(pop.Namespace.HasValue ? pop.Namespace.Value + ':' : "")}{pop.Name}, but got {(endNamespace.HasValue ? endNamespace.Value + ':' : "")}{name} instead",
+                Severity = DiagnosticSeverity.Warning
+            });
+
             return;
         }
         
         pop.Range = pop.Range.WithEnd(endPosition);
 
-        pop.EndTag = new()
+        pop.EndTag = new HtmlTagNode
         {
             Name = name.Text,
             Namespace = endNamespace,
             Range = new TokenRange(startPosition, lexer.Position)
         };
-
     }
 }

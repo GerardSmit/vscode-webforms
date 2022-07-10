@@ -13,12 +13,14 @@ public class HtmlTagNode
     public TokenString Name { get; set; }
 
     public TokenRange Range { get; set; }
+
+    public TokenRange ElementRange => Namespace.HasValue ? Namespace.Value.Range.WithEnd(Name.Range.End) : Name.Range;
 }
 
 public class HtmlNode : ContainerNode, IAttributeNode
 {
     private const int TypeTag = 0;
-    private const int TypeAttribute = 0;
+    private const int TypeAttribute = 1;
     
     public HtmlNode()
         : base(NodeType.Html)
@@ -66,11 +68,11 @@ public class HtmlNode : ContainerNode, IAttributeNode
 
     public override void AddRanges(ICollection<HitRange> ranges)
     {
-        ranges.Add(new HitRange(StartTag.Name.Range));
+        ranges.Add(new HitRange(StartTag.ElementRange));
 
         if (EndTag != null)
         {
-            ranges.Add(new HitRange(EndTag.Name.Range, TypeTag));
+            ranges.Add(new HitRange(EndTag.ElementRange));
         }
 
         foreach (var (key, _) in Attributes)
@@ -90,7 +92,7 @@ public class HtmlNode : ContainerNode, IAttributeNode
         items.Add(new DocumentHighlight
         {
             Kind = DocumentHighlightKind.Read,
-            Range = StartTag.Name.Range
+            Range = StartTag.ElementRange
         });
 
         if (EndTag != null)
@@ -98,7 +100,7 @@ public class HtmlNode : ContainerNode, IAttributeNode
             items.Add(new DocumentHighlight
             {
                 Kind = DocumentHighlightKind.Read,
-                Range = EndTag.Name.Range
+                Range = EndTag.ElementRange
             });
         }
     }
@@ -116,7 +118,7 @@ public class HtmlNode : ContainerNode, IAttributeNode
 
         changes.Add(new TextEdit
         {
-            Range = StartTag.Name.Range,
+            Range = StartTag.ElementRange,
             NewText = newText
         });
 
@@ -124,7 +126,7 @@ public class HtmlNode : ContainerNode, IAttributeNode
         {
             changes.Add(new TextEdit
             {
-                Range = EndTag.Name.Range,
+                Range = EndTag.ElementRange,
                 NewText = newText
             });
         }

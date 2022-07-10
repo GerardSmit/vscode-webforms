@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using Mono.Cecil;
 using WebForms.Models;
-using WebForms.Nodes;
 using static OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity;
 using Diagnostic = OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic;
 using DiagnosticSeverity = OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity;
@@ -48,7 +47,7 @@ public sealed class TypeContainer
         codeType = new CodeType(this, reference, new List<CodeTypeProperty>(), control);
         _types[key] = codeType;
         return codeType;
-    } 
+    }
 }
 
 public record CodeMethod(string Name, CodeType ReturnType) : IMethodOrType;
@@ -83,30 +82,29 @@ public record CodeType(TypeContainer Container, TypeReference Type, List<CodeTyp
 
 public record CodeTypeProperty(string Name, CodeType Type);
 
-public class ExpressionVisitor
+public readonly ref struct ExpressionVisitor
 {
-    private readonly List<Diagnostic> _diagnostics;
-    private readonly Document _document;
+    private readonly DocumentVisitor _documentVisitor;
+    private readonly bool _isEval;
     private readonly TokenRange _range;
-    private readonly Node _node;
 
-    public ExpressionVisitor(Document document, List<Diagnostic> diagnostics, TokenRange range, Node node)
+    public ExpressionVisitor(
+        DocumentVisitor documentVisitor,
+        bool isEval,
+        TokenRange range)
     {
-        _diagnostics = diagnostics;
+        _isEval = isEval;
         _range = range;
-        _document = document;
-        _node = node;
+        _documentVisitor = documentVisitor;
     }
-    
-    public TypeContainer? TypeContainer { get; set; }
 
-    public IMethodOrType? Inspect(CodeType parent, ExpressionSyntax node)
+    public IMethodOrType? Inspect(ExpressionSyntax node)
     {
         switch (node)
         {
             case InvocationExpressionSyntax invocation:
             {
-                var result = Inspect(parent, invocation.Expression);
+                var result = Inspect(invocation.Expression);
 
                 if (result == null)
                 {
@@ -121,30 +119,34 @@ public class ExpressionVisitor
 
                 foreach (var argument in invocation.ArgumentList.Arguments)
                 {
-                    Inspect(parent, argument.Expression);
+                    Inspect(argument.Expression);
                 }
 
                 return method.ReturnType;
             }
+            case IdentifierNameSyntax {Identifier.Text: "Container"} when _isEval:
+            {
+                return _documentVisitor.TypeContainer.Get("System.Web.UI.WebControls.DataListItem");
+            }
+            case IdentifierNameSyntax {Identifier.Text: "Item"} identifier when _isEval:
+            {
+                var type = _documentVisitor.Node.GetItemType();
+
+                if (type != null)
+                {
+                    return _documentVisitor.TypeContainer.Get(type);
+                }
+
+                AddDiagnostic(identifier.Span, "Item can only be used if the ItemType is defined");
+                return null;
+            }
             case IdentifierNameSyntax identifier:
             {
-                if (identifier.Identifier.Text == "Item" && TypeContainer != null)
-                {
-                    var type = _node.GetItemType();
-
-                    if (type != null)
-                    {
-                        return TypeContainer.Get(type);
-                    }
-                }
-                
-                var result = GetMember(parent, identifier.Identifier);
-            
-                return result;
+                return GetMember(_documentVisitor.Type, identifier.Identifier);
             }
             case MemberAccessExpressionSyntax member:
             {
-                var expression = Inspect(parent, member.Expression);
+                var expression = Inspect(member.Expression);
 
                 if (expression is CodeMethod method)
                 {
@@ -166,7 +168,7 @@ public class ExpressionVisitor
 
     private void AddDiagnostic(TextSpan span, string message, DiagnosticSeverity severity = Error)
     {
-        _diagnostics.Add(new Diagnostic
+        _documentVisitor.Diagnostics.Add(new Diagnostic
         {
             Message = message,
             Range = GetRange(span),
@@ -201,19 +203,19 @@ public class ExpressionVisitor
     public TokenRange GetRange(TextSpan span)
     {
         return new TokenRange(
-            GetPosition(span.Start),
-            GetPosition(span.End)
+            GetPosition(_range, span.Start),
+            GetPosition(_range, span.End)
         );
     }
 
-    private TokenPosition GetPosition(int offset)
+    private TokenPosition GetPosition(TokenRange range, int offset)
     {
-        offset += _range.Start.Offset;
-        
-        for (var i = _range.End.Line; i >= 0; i--)
+        offset += range.Start.Offset;
+
+        for (var i = range.End.Line; i >= 0; i--)
         {
-            var lineOffset = _document.Lines[i];
-            
+            var lineOffset = _documentVisitor.Document.Lines[i];
+
             if (offset >= lineOffset)
             {
                 return new TokenPosition(offset, i, offset - lineOffset);
