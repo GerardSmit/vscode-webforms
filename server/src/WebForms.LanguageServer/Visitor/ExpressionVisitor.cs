@@ -87,14 +87,17 @@ public readonly ref struct ExpressionVisitor
     private readonly DocumentVisitor _documentVisitor;
     private readonly bool _isEval;
     private readonly TokenRange _range;
+    private readonly string? _itemType;
 
     public ExpressionVisitor(
         DocumentVisitor documentVisitor,
         bool isEval,
-        TokenRange range)
+        TokenRange range,
+        string? itemType = null)
     {
         _isEval = isEval;
         _range = range;
+        _itemType = itemType;
         _documentVisitor = documentVisitor;
     }
 
@@ -130,11 +133,9 @@ public readonly ref struct ExpressionVisitor
             }
             case IdentifierNameSyntax {Identifier.Text: "Item"} identifier when _isEval:
             {
-                var type = _documentVisitor.Node.GetItemType();
-
-                if (type != null)
+                if (_itemType != null)
                 {
-                    return _documentVisitor.TypeContainer.Get(type);
+                    return _documentVisitor.TypeContainer.Get(_itemType);
                 }
 
                 AddDiagnostic(identifier.Span, "Item can only be used if the ItemType is defined");
@@ -142,6 +143,11 @@ public readonly ref struct ExpressionVisitor
             }
             case IdentifierNameSyntax identifier:
             {
+                if (_documentVisitor.Variables.TryGetValue(identifier.Identifier.Text, out var type))
+                {
+                    return type;
+                }
+
                 return GetMember(_documentVisitor.Type, identifier.Identifier);
             }
             case MemberAccessExpressionSyntax member:
@@ -161,6 +167,13 @@ public readonly ref struct ExpressionVisitor
             
                 return GetMember(variable, member.Name.Identifier);
             }
+            case BinaryExpressionSyntax binary:
+            {
+                Inspect(binary.Left);
+                return Inspect(binary.Right);
+            }
+            case PrefixUnaryExpressionSyntax unaryExpression:
+                return Inspect(unaryExpression.Operand);
             default:
                 return null;
         }

@@ -13,6 +13,7 @@ using WebForms.Roslyn;
 using static OmniSharp.Extensions.LanguageServer.Protocol.Models.DiagnosticSeverity;
 using Diagnostic = OmniSharp.Extensions.LanguageServer.Protocol.Models.Diagnostic;
 using DiagnosticSeverity = Microsoft.CodeAnalysis.DiagnosticSeverity;
+using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace WebForms.Models;
 
@@ -22,19 +23,24 @@ public enum ControlReferenceSource
     Document
 }
 
-public record struct ControlReference(Control Control, ControlReferenceSource Source);
+public record struct ControlReference(Control Control, ControlReferenceSource Source, Document? Document = null);
 
 public record struct ControlKey(string Namespace, string Name);
 
 public class Document
 {
+    private readonly TextDocumentContainer _documentContainer;
     private readonly ILanguageServerFacade _languageServer;
     private string _text = "";
+    private readonly string _uriString;
+    private TypeDefinition? _type;
 
-    public Document(DocumentUri uri, ILanguageServerFacade languageServer)
+    public Document(DocumentUri uri, ILanguageServerFacade languageServer, TextDocumentContainer documentContainer)
     {
         _languageServer = languageServer;
+        _documentContainer = documentContainer;
         Uri = uri;
+        _uriString = uri.ToString();
     }
 
     public DocumentUri Uri { get; }
@@ -47,7 +53,15 @@ public class Document
 
     public RootNode Node { get; set; } = new();
 
-    public TypeDefinition? Type { get; set; }
+    public TypeDefinition? Type
+    {
+        get
+        {
+            UpdateProject();
+            return _type;
+        }
+        set => _type = value;
+    }
 
     public List<HitRange> HitRanges { get; set; } = new();
 
@@ -58,6 +72,8 @@ public class Document
     public TokenString Code { get; set; }
 
     public Dictionary<string, HtmlNode> Ids { get; set; } = new();
+
+    public bool IsProjectDirty { get; set; } = true;
 
     public string Text
     {
@@ -100,6 +116,13 @@ public class Document
 
     public void UpdateProject()
     {
+        if (!IsProjectDirty)
+        {
+            return;
+        }
+
+        IsProjectDirty = false;
+
         RemoveControls(ControlReferenceSource.Project);
         
         if (Project == null)
@@ -135,24 +158,73 @@ public class Document
 
         RemoveControls(ControlReferenceSource.Document);
 
-        foreach (var directiveNode in Node.AllNodes.OfType<DirectiveNode>())
+        if (Project is {} project)
         {
-            if (directiveNode.DirectiveType != DirectiveType.Register ||
-                !directiveNode.Attributes.TryGetValue("tagprefix", out var tagPrefix))
+            foreach (var directiveNode in Node.AllNodes.OfType<DirectiveNode>())
             {
-                continue;
-            }
+                if (directiveNode.DirectiveType != DirectiveType.Register ||
+                    !directiveNode.Attributes.TryGetValue("tagprefix", out var tagPrefix))
+                {
+                    continue;
+                }
 
-            if (!directiveNode.Attributes.TryGetValue("namespace", out var ns) ||
-                Project is not { } project ||
-                !project.NamespaceControls.TryGetValue(ns.Value, out var controls))
-            {
-                continue;
-            }
-            
-            foreach (var control in controls)
-            {
-                Controls[new ControlKey(tagPrefix.Value, control.Name)] = new ControlReference(control, ControlReferenceSource.Document);
+                if (directiveNode.Attributes.TryGetValue("tagname", out var tagName) &&
+                    directiveNode.Attributes.TryGetValue("src", out var src))
+                {
+                    var path = src.Value;
+                    var isRoot = false;
+
+                    if (path.StartsWith("/"))
+                    {
+                        path = path[1..];
+                        isRoot = true;
+                    }
+                    else if (path.StartsWith("~/"))
+                    {
+                        path = path[2..];
+                        isRoot = true;
+                    }
+
+                    if (!isRoot)
+                    {
+                        path = Path.Combine(Uri.Path, path);
+                    }
+                    else if (Project != null)
+                    {
+                        path = Path.Combine(Project.Path, path);
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    var uri = Uri.With(new DocumentUriComponents
+                    {
+                        Path = path
+                    });
+
+                    var document = _documentContainer.Get(uri);
+
+                    if (document.Type is { } documentType &&
+                        project.NamespaceControls.TryGetValue(documentType.Namespace, out var namespaceControls) &&
+                        namespaceControls.FirstOrDefault(i => i.Name.Equals(tagName.Value, StringComparison.OrdinalIgnoreCase)) is {} control)
+                    {
+                        Controls[new ControlKey(tagPrefix.Value, tagName.Value)] = new ControlReference(control, ControlReferenceSource.Document, document);
+                    }
+
+                    continue;
+                }
+
+                if (!directiveNode.Attributes.TryGetValue("namespace", out var ns) ||
+                    !project.NamespaceControls.TryGetValue(ns.Value, out var controls))
+                {
+                    continue;
+                }
+
+                foreach (var control in controls)
+                {
+                    Controls[new ControlKey(tagPrefix.Value, control.Name)] = new ControlReference(control, ControlReferenceSource.Document);
+                }
             }
         }
 
@@ -170,8 +242,42 @@ public class Document
             AddControls(children, type, container, diagnostics);
         }
 
+        var ranges = new
+        {
+            Js = new List<OffsetRange>(),
+            Css = new List<OffsetRange>()
+        };
+
         foreach (var element in Node.AllNodes.OfType<HtmlNode>())
         {
+            if (element.RunAt == RunAt.Client)
+            {
+                List<OffsetRange> target;
+
+                if (element.Name.Value.Equals("script", StringComparison.OrdinalIgnoreCase))
+                {
+                    target = ranges.Js;
+                }
+                else if (element.Name.Value.Equals("style", StringComparison.OrdinalIgnoreCase))
+                {
+                    target = ranges.Css;
+                }
+                else
+                {
+                    continue;
+                }
+
+                if (element.EndTag == null)
+                {
+                    continue;
+                }
+
+                target.Add(new OffsetRange(
+                    element.StartTag.Range.End.Offset,
+                    element.EndTag.Range.Start.Offset
+                ));
+            }
+
             var control = element.CodeType?.Control;
 
             if (control == null)
@@ -208,6 +314,17 @@ public class Document
             }
         }
 
+        _documentContainer.Server.SendNotification("webforms/ranges", new
+        {
+            Document = _uriString,
+            Ranges = ranges,
+            Versions = new
+            {
+                Js = ranges.Js.Aggregate(0, HashCode.Combine),
+                Css = ranges.Css.Aggregate(0, HashCode.Combine)
+            }
+        });
+
         foreach (var expressionNode in Node.AllNodes.OfType<ExpressionNode>())
         {
             AddDiagnostics(expressionNode.Expression.GetDiagnostics(), diagnostics, expressionNode.Range);
@@ -238,6 +355,17 @@ public class Document
             CodeType controlType;
             CodeType? nextParent;
             string? name = null;
+
+            if (element.RunAt == RunAt.Server && element.Attributes.TryGetValue("itemtype", out var itemType) &&
+                container.Get(itemType.Value) is null)
+            {
+                diagnostics.Add(new Diagnostic
+                {
+                    Range = itemType.Range,
+                    Message = $"Type '{itemType.Value}' could not be found",
+                    Severity = Error
+                });
+            }
             
             if ((element.RunAt == RunAt.Server || parent != null) &&
                 element.StartTag.Namespace is { } ns &&

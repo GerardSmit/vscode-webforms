@@ -20,6 +20,8 @@ public class ExpressionNode : Node
 
     public bool IsEval { get; set; }
 
+    public string? ItemType { get; set; }
+
     public override DocumentSymbol CreateSymbol()
     {
         return new DocumentSymbol

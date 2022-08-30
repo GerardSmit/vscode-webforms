@@ -14,6 +14,7 @@ var server = await LanguageServer.From(options =>
         .WithOutput(Console.OpenStandardOutput())
         .WithHandler<HighlightHandler>()
         .WithHandler<RenameHandler>()
+        .WithHandler<CompletionHandler>()
         .WithHandler<PrepareRenameHandler>()
         .WithHandler<TextDocumentHandler>()
         .WithHandler<DocumentSymbolHandler>()

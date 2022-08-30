@@ -14,6 +14,7 @@ public class Parser
     private ParserContainer _container;
     private ParserContainer? _headerContainer;
     private int _expressionId;
+    private string? _itemType;
 
     public Parser(List<Diagnostic> diagnostics)
     {
@@ -64,7 +65,8 @@ public class Parser
             Range = token.Range,
             Text = token.Text,
             Expression = SyntaxFactory.ParseExpression(token.Text),
-            IsEval = isEval
+            IsEval = isEval,
+            ItemType = isEval ? _itemType : null
         };
 
         _container.AddExpression(element);
@@ -176,6 +178,11 @@ public class Parser
                 }
                 else
                 {
+                    if (next.Text.Value.Equals("itemtype", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _itemType = value.Value;
+                    }
+
                     element.Attributes.Add(next.Text, value);
                 }
             }
@@ -258,7 +265,9 @@ public class Parser
             return;
         }
 
-        if (pop.Name != name.Text || pop.Namespace != endNamespace)
+        if (!pop.Name.Value.Equals(name.Text.Value, StringComparison.OrdinalIgnoreCase) ||
+            pop.Namespace.HasValue != endNamespace.HasValue ||
+            pop.Namespace.HasValue && !pop.Namespace.Value.Value.Equals(endNamespace?.Value, StringComparison.OrdinalIgnoreCase))
         {
             _diagnostics.Add(new Diagnostic
             {

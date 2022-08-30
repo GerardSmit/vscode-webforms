@@ -7,13 +7,13 @@ public record ControlRegistration(string? Prefix, string? TagName, string? Sourc
 
 public sealed class Project : IDisposable
 {
-    private readonly string _binPath;
-
-    public Project(string binPath)
+    public Project(string path)
     {
-        _binPath = binPath;
+        Path = path;
         Resolver = new ProjectAssemblyResolver();
     }
+
+    public string Path { get; }
 
     public ProjectAssemblyResolver Resolver { get; }
 
@@ -27,7 +27,7 @@ public sealed class Project : IDisposable
 
     public void Load()
     {
-        var webConfigPath = Path.Combine(_binPath, "web.config");
+        var webConfigPath = System.IO.Path.Combine(Path, "web.config");
 
         if (File.Exists(webConfigPath))
         {
@@ -77,7 +77,7 @@ public sealed class Project : IDisposable
 
     public void LoadAssemblies()
     {
-        foreach (var path in Directory.GetFiles(Path.Combine(_binPath, "bin"), "*.dll"))
+        foreach (var path in Directory.GetFiles(System.IO.Path.Combine(Path, "bin"), "*.dll"))
         {
             Resolver.LoadAssembly(path);
         }
@@ -106,6 +106,11 @@ public sealed class Project : IDisposable
 
     private void UpdateDocuments()
     {
+        foreach (var document in Documents)
+        {
+            document.IsProjectDirty = true;
+        }
+
         foreach (var document in Documents)
         {
             document.UpdateProject();

@@ -1,5 +1,7 @@
 ﻿namespace WebForms.Models;
 
+public record struct OffsetRange(int Start, int End);
+
 public record struct TokenRange(TokenPosition Start, TokenPosition End)
 {
     public override string ToString()
@@ -16,6 +18,11 @@ public record struct TokenRange(TokenPosition Start, TokenPosition End)
     public static implicit operator OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(TokenRange range)
     {
         return new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(range.Start, range.End);
+    }
+
+    public static implicit operator OffsetRange(TokenRange range)
+    {
+        return new OffsetRange(range.Start.Offset, range.End.Offset);
     }
 
     public TokenRange WithEnd(TokenPosition end)
