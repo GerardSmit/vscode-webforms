@@ -1,12 +1,12 @@
-import { nodeResolve } from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
-import typescript from '@rollup/plugin-typescript';
-import replace from '@rollup/plugin-replace';
-import * as path from 'path';
+const { nodeResolve } = require('@rollup/plugin-node-resolve');
+const commonjs = require('@rollup/plugin-commonjs');
+const typescript = require('@rollup/plugin-typescript');
+const replace = require('@rollup/plugin-replace');
+const { join } = require('path');
 
 const production = !process.env.ROLLUP_WATCH
 
-export default [{
+module.exports = [{
     input: 'src/extension.ts',
     output: {
         file: 'extension/index.js',
@@ -18,7 +18,7 @@ export default [{
     plugins: [
         replace({
             'process.env.NODE_ENV': JSON.stringify(production ? 'production' : 'dev'),
-            'process.env.SERVER_PATH': JSON.stringify(path.join(__dirname, 'server', 'src', 'WebForms.LanguageServer', 'bin', 'Debug', 'net6.0', 'WebForms.LanguageServer.exe'))
+            'process.env.SERVER_PATH': JSON.stringify(join(__dirname, 'server', 'src', 'WebForms.LanguageServer', 'bin', 'Debug', 'net8.0', 'WebForms.LanguageServer.exe'))
         }),
         typescript(),
         nodeResolve(),

@@ -8,8 +8,11 @@ public enum TokenType
     EndDirective,
 
     Expression,
+    EncodeExpression,
     EvalExpression,
     Statement,
+
+    ServerComment,
 
     ElementNamespace,
     ElementName,

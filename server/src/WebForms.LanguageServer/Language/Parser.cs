@@ -97,7 +97,7 @@ public class Parser
     {
         var element = new DirectiveNode
         {
-            Range = new TokenRange(startPosition, startPosition)
+            Range = new TokenRange(lexer.File, startPosition, startPosition)
         };
 
         var isFirst = true;
@@ -141,7 +141,7 @@ public class Parser
     {
         var element = new HtmlNode
         {
-            Range = new TokenRange(startPosition, startPosition)
+            Range = new TokenRange(lexer.File, startPosition, startPosition)
         };
 
         if (lexer.Peek() is { Type: TokenType.ElementNamespace } ns)
@@ -287,7 +287,7 @@ public class Parser
         {
             Name = name.Text,
             Namespace = endNamespace,
-            Range = new TokenRange(startPosition, lexer.Position)
+            Range = new TokenRange(lexer.File, startPosition, lexer.Position)
         };
     }
 }

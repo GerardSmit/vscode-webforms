@@ -216,6 +216,7 @@ public readonly ref struct ExpressionVisitor
     public TokenRange GetRange(TextSpan span)
     {
         return new TokenRange(
+            _range.File,
             GetPosition(_range, span.Start),
             GetPosition(_range, span.End)
         );

@@ -6,7 +6,7 @@ using SymbolKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.SymbolKin
 
 namespace WebForms.Nodes;
 
-public class StatementNode : Node
+public class StatementNode : Node, ISymbolNode
 {
     public StatementNode() : base(NodeType.Statement)
     {
@@ -14,7 +14,7 @@ public class StatementNode : Node
     
     public TokenString Text { get; set; }
 
-    public override DocumentSymbol CreateSymbol()
+    public DocumentSymbol CreateSymbol()
     {
         return new DocumentSymbol
         {

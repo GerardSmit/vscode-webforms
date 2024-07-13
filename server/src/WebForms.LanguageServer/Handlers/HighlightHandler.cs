@@ -37,7 +37,7 @@ public class HighlightHandler : IDocumentHighlightHandler
     {
         return new DocumentHighlightRegistrationOptions
         {
-            DocumentSelector = DocumentSelector.ForLanguage("webforms")
+            DocumentSelector = TextDocumentSelector.ForLanguage("webforms")
         };
     }
 }

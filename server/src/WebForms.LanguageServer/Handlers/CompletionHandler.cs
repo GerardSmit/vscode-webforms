@@ -18,7 +18,7 @@ public class CompletionHandler : ICompletionHandler
     {
         return new CompletionRegistrationOptions
         {
-            DocumentSelector = DocumentSelector.ForLanguage("webforms")
+            DocumentSelector = TextDocumentSelector.ForLanguage("webforms")
         };
     }
 }

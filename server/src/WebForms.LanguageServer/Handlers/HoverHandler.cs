@@ -35,7 +35,7 @@ public class HoverHandler : IHoverHandler
     {
         return new HoverRegistrationOptions
         {
-            DocumentSelector = DocumentSelector.ForLanguage("webforms")
+            DocumentSelector = TextDocumentSelector.ForLanguage("webforms")
         };
     }
 }

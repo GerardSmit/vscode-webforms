@@ -4,7 +4,7 @@ using WebForms.Models;
 
 namespace WebForms.Nodes;
 
-public class ExpressionNode : Node
+public class ExpressionNode : Node, ISymbolNode
 {
     public ExpressionNode(int id)
         : base(NodeType.Expression)
@@ -22,7 +22,7 @@ public class ExpressionNode : Node
 
     public string? ItemType { get; set; }
 
-    public override DocumentSymbol CreateSymbol()
+    public DocumentSymbol CreateSymbol()
     {
         return new DocumentSymbol
         {

@@ -1,8 +1,11 @@
-﻿namespace WebForms.Models;
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
+
+namespace WebForms.Models;
 
 public record struct OffsetRange(int Start, int End);
 
-public record struct TokenRange(TokenPosition Start, TokenPosition End)
+public readonly record struct TokenRange(string File, TokenPosition Start, TokenPosition End)
 {
     public override string ToString()
     {
@@ -27,6 +30,41 @@ public record struct TokenRange(TokenPosition Start, TokenPosition End)
 
     public TokenRange WithEnd(TokenPosition end)
     {
-        return new TokenRange(Start, end);
+        return this with { End = end };
+    }
+
+    public static implicit operator TextSpan(TokenRange range) => new(range.Start.Offset, range.End.Offset - range.Start.Offset);
+
+    public static implicit operator LinePositionSpan(TokenRange range) => new(range.Start, range.End);
+
+    public static implicit operator Location(TokenRange range) => Location.Create(range.File, range, range);
+
+    public TokenRange Slice(int offset)
+    {
+        return this with
+        {
+            Start = Start with
+            {
+                Column = Start.Column + offset,
+                Offset = Start.Offset + offset
+            }
+        };
+    }
+
+    public TokenRange Slice(int offset, int length)
+    {
+        return this with
+        {
+            Start = Start with
+            {
+                Column = Start.Column + offset,
+                Offset = Start.Offset + offset
+            },
+            End = Start with
+            {
+                Column = Start.Column + offset + length,
+                Offset = Start.Offset + offset + length
+            }
+        };
     }
 }

@@ -8,7 +8,8 @@ public ref struct Lexer
     private static readonly ReadOnlyMemory<char> StartDocType = "<!DOCTYPE".ToCharArray();
     private static readonly ReadOnlyMemory<char> StartStatement = "<%".ToCharArray();
     private static readonly ReadOnlyMemory<char> End = "%>".ToCharArray();
-    private static readonly ReadOnlyMemory<char> CommentEnd = "--%>".ToCharArray();
+    private static readonly ReadOnlyMemory<char> StartServerComment = "<%--".ToCharArray();
+    private static readonly ReadOnlyMemory<char> EndServerComment = "--%>".ToCharArray();
     private static readonly ReadOnlyMemory<char> StartComment = "<!--".ToCharArray();
     private static readonly ReadOnlyMemory<char> EndComment = "-->".ToCharArray();
     private static readonly ReadOnlyMemory<char> RunAt = "runat".ToCharArray();
@@ -18,8 +19,14 @@ public ref struct Lexer
     private readonly ReadOnlySpan<char> _endServerComment;
     private readonly ReadOnlySpan<char> _startDocType;
     private readonly ReadOnlySpan<char> _startComment;
+    private readonly ReadOnlySpan<char> _startServerComment;
     private readonly ReadOnlySpan<char> _endComment;
     private readonly ReadOnlySpan<char> _runAt;
+
+    private readonly Stack<string> _tags;
+    private readonly StringBuilder _textBuilder;
+    private TokenPosition _textStart;
+    private TokenPosition _textEnd;
 
     private readonly List<Token> _nodes;
     private readonly ReadOnlySpan<char> _input;
@@ -30,37 +37,44 @@ public ref struct Lexer
     private bool _ignoreNewLine;
     private bool _toCode;
 
-    public Lexer(ReadOnlySpan<char> input)
+    public Lexer(string file, ReadOnlySpan<char> input)
     {
         CodeBuilder = new StringBuilder(input.Length);
         _nodes = new List<Token>();
+        _textBuilder = new StringBuilder();
         _startStatement = StartStatement.Span;
         _startDocType = StartDocType.Span;
         _startComment = StartComment.Span;
+        _startServerComment = StartServerComment.Span;
         _endComment = EndComment.Span;
         _runAt = RunAt.Span;
         _end = End.Span;
-        _endServerComment = CommentEnd.Span;
+        _endServerComment = EndServerComment.Span;
         _input = input;
+        File = Path.GetFullPath(file);
         _line = 0;
         _column = 0;
         _offset = 0;
         _nodeOffset = -1;
         _ignoreNewLine = false;
-        _toCode = false;
+        _textStart = default;
+        _textEnd = default;
+        _tags = new Stack<string>();
     }
 
-    public StringBuilder CodeBuilder { get; }
+    public string File { get; }
 
     public List<int> Lines { get; } = new() { 0 };
 
     public TokenPosition Position => new(_offset, _line, _column);
 
-    public TokenString Code => new(CodeBuilder.ToString(), new TokenRange(default, Position));
-    
     private char Current => _offset < _input.Length ? _input[_offset] : '\0';
 
     public bool HasNext => _offset < _input.Length || _nodeOffset < _nodes.Count;
+
+    public StringBuilder CodeBuilder { get; }
+
+    public TokenString Code => new(CodeBuilder.ToString(), new TokenRange(File, default, Position));
 
     public void Forward()
     {
@@ -110,7 +124,7 @@ public ref struct Lexer
         {
             _line++;
             _ignoreNewLine = current == '\r';
-            
+
             Lines.Add(_offset + (_ignoreNewLine ? 2 : 1));
         }
 
@@ -142,31 +156,39 @@ public ref struct Lexer
         return result;
     }
 
-    public Token? Peek()
+    public Token? Peek(int offset = 1)
     {
-        var offset = _nodeOffset + 1;
+        var index = _nodeOffset + offset;
 
-        if (offset >= _nodes.Count && !Consume())
+        while (index >= _nodes.Count)
+        {
+            if (!Consume())
+            {
+                return null;
+            }
+        }
+
+        if (index >= _nodes.Count)
         {
             return null;
         }
 
-        if (offset >= _nodes.Count)
-        {
-            return null;
-        }
-
-        return _nodes[offset];
+        return _nodes[index];
     }
 
     private bool Consume()
     {
         if (_offset >= _input.Length)
         {
-            return false;
+            return AddText();
         }
 
         if (ConsumeComment())
+        {
+            return true;
+        }
+
+        if (ConsumeServerComment())
         {
             return true;
         }
@@ -197,6 +219,11 @@ public ref struct Lexer
         return Consume(_startComment, _endComment, TokenType.Comment);
     }
 
+    private bool ConsumeServerComment()
+    {
+        return Consume(_startServerComment, _endServerComment, TokenType.ServerComment);
+    }
+
     private bool ConsumeDocType()
     {
         if (!Consume(_startDocType, true))
@@ -218,9 +245,9 @@ public ref struct Lexer
             return false;
         }
 
-        var slice = _input[_offset..];
+        var slice = _input.Slice(_offset);
         var last = slice.IndexOf('>');
-        return last != -1 && slice[..last].Contains(_runAt, StringComparison.OrdinalIgnoreCase);
+        return last != -1 && slice.Slice(0, last).Contains(_runAt, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool ConsumeWebFormsTag()
@@ -229,18 +256,20 @@ public ref struct Lexer
         {
             return false;
         }
-        
+
         return ConsumeElement(true) || ConsumeInline();
     }
 
     private bool ConsumeElement(bool requireRunAt = false)
     {
-        if (requireRunAt && !IsWebFormsElement())
+        var isServerTag = IsWebFormsElement(); // TODO: Performance
+
+        if (requireRunAt && !isServerTag)
         {
             return false;
         }
 
-        var start = Position;
+        var tagStart = Position;
 
         if (!Consume('<'))
         {
@@ -248,15 +277,28 @@ public ref struct Lexer
         }
 
         var isClosingTag = Consume('/');
-        AddNode(isClosingTag ? TokenType.TagOpenSlash : TokenType.TagOpen, start, default(TokenString));
-
-        start = Position;
+        var start = Position;
         var name = ReadTagName();
+        var isInvalid = name.Value.Length == 0 ||
+                        (!isServerTag && !isClosingTag && !ShouldParse(name.Value, isClosingTag) && Current != ':');
 
-        if (name.Value.Length == 0)
+        if (isInvalid || isClosingTag)
         {
-            return false;
+            if (isInvalid || _tags.Count == 0 || name.Value != _tags.Peek())
+            {
+                AddNode(TokenType.Text, tagStart, new TokenString(isClosingTag ? "</" : "<", new TokenRange(File, tagStart, start)));
+                AddNode(TokenType.Text, start, new TokenString(name, new TokenRange(File, start, Position)));
+                return true;
+            }
+
+            _tags.Pop();
         }
+        else
+        {
+            _tags.Push(name.Value);
+        }
+
+        AddNode(isClosingTag ? TokenType.TagOpenSlash : TokenType.TagOpen, new TokenRange(File, tagStart, start));
 
         if (Current == ':')
         {
@@ -266,7 +308,7 @@ public ref struct Lexer
             name = ReadTagName();
         }
 
-        AddNode(TokenType.ElementName, new TokenRange(start, Position), name);
+        AddNode(TokenType.ElementName, new TokenRange(File, start, Position), name);
 
         var isVoidTag = name.Value is "area" or "base" or "br" or "col" or "command" or "embed"
             or "hr" or "img" or "input" or "keygen" or "link" or "meta"
@@ -313,7 +355,7 @@ public ref struct Lexer
                     var end = Position;
                     var index = _nodes.Count;
 
-                    if (ConsumeWebFormsTag())
+                    if (!isServerTag && ConsumeWebFormsTag())
                     {
                         var text = CreateString(start, end);
                         InsertNode(index, TokenType.Text, text.Range, text);
@@ -328,7 +370,7 @@ public ref struct Lexer
                         continue;
                     }
 
-                    var range = new TokenRange(end, Position);
+                    var range = new TokenRange(File, end, Position);
 
                     Forward();
 
@@ -342,6 +384,7 @@ public ref struct Lexer
                         AddNode(TokenType.TagOpenSlash, range);
                         AddNode(TokenType.ElementName, start, currentName);
                         SkipWhiteSpace();
+                        _tags.Pop();
                         break;
                     }
                 }
@@ -350,7 +393,40 @@ public ref struct Lexer
 
         if (Consume('>'))
         {
+            if (hasClosing)
+            {
+                _tags.Pop();
+            }
+
             AddNode(hasClosing ? TokenType.TagSlashClose : TokenType.TagClose, start, default(TokenString));
+        }
+
+        return true;
+    }
+
+    private bool ShouldParse(string name, bool isClosingTag)
+    {
+        var isSpecialTag = char.IsUpper(name[0]);
+
+        if (!isSpecialTag)
+        {
+            return false;
+        }
+
+        // It's possible there is a expression in the attribute list.
+        // If this it the case, we should not parse the tag since we need to render the expression.
+        var slice = _input.Slice(_offset);
+        var last = slice.IndexOf('>');
+
+        if (last == -1)
+        {
+            return true;
+        }
+
+        // Check for '<%'
+        if (slice.Slice(0, last).Contains(_startStatement, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
         }
 
         return true;
@@ -374,7 +450,11 @@ public ref struct Lexer
             type = TokenType.Comment;
             end = _endServerComment;
         }
-        else if (Consume(':') || Consume('='))
+        else if (Consume(':'))
+        {
+            type = TokenType.EncodeExpression;
+        }
+        else if (Consume('='))
         {
             type = TokenType.Expression;
         }
@@ -395,7 +475,7 @@ public ref struct Lexer
             return true;
         }
 
-        return ConsumeUntil(_startStatement, end, type, start, type == TokenType.Statement);
+        return ConsumeUntil(_startStatement, end, type, start);
     }
 
     private bool ConsumeInlineSkipWhiteSpace()
@@ -472,7 +552,7 @@ public ref struct Lexer
 
                 var current = _input[_offset];
 
-                if (current is '\n' or '\r' || current == token)
+                if (current == token)
                 {
                     break;
                 }
@@ -510,7 +590,7 @@ public ref struct Lexer
 
         return CreateString(start, Position);
     }
-        
+
     private void AddNode(TokenType type, TokenPosition start)
     {
         AddNode(type, start, Position);
@@ -518,7 +598,31 @@ public ref struct Lexer
 
     private void AddNode(TokenType type, TokenPosition start, TokenPosition end)
     {
-        AddNode(type, new TokenRange(start, end), CreateString(start, end));
+        AddNode(type, new TokenRange(File, start, end), CreateString(start, end));
+    }
+
+    private void TrackText(TokenRange range, TokenString value)
+    {
+        if (_textBuilder.Length == 0)
+        {
+            _textStart = range.Start;
+        }
+
+        _textEnd = range.End;
+        _textBuilder.Append(value.Value);
+    }
+
+    private bool AddText()
+    {
+        if (_textBuilder.Length == 0)
+        {
+            return false;
+        }
+
+        var text = new TokenString(_textBuilder.ToString(), new TokenRange(File, _textStart, _textEnd));
+        _textBuilder.Clear();
+        _nodes.Add(new Token(TokenType.Text, text.Range, text));
+        return true;
     }
 
     private void InsertNode(int index, TokenType type, TokenRange range, TokenString value = default)
@@ -528,17 +632,31 @@ public ref struct Lexer
 
     private void AddNode(TokenType type, TokenRange range, TokenString value = default)
     {
+        if (type == TokenType.Text)
+        {
+            TrackText(range, value);
+            return;
+        }
+
+        AddText();
         _nodes.Add(new Token(type, range, value));
     }
 
     private void AddNode(TokenType type, TokenPosition start, TokenString value)
     {
-        _nodes.Add(new Token(type, new TokenRange(start, Position), value));
+        if (type == TokenType.Text)
+        {
+            TrackText(value.Range with { Start = start }, value);
+            return;
+        }
+
+        AddText();
+        _nodes.Add(new Token(type, new TokenRange(File, start, Position), value));
     }
 
     private TokenString CreateString(TokenPosition start, TokenPosition end)
     {
-        return new TokenString(new string(_input.Slice(start.Offset, end.Offset - start.Offset)), new TokenRange(start, end));
+        return new TokenString(_input.Slice(start.Offset, end.Offset - start.Offset).ToString(), new TokenRange(File, start, end));
     }
 
     public void SkipWhiteSpace()
@@ -594,7 +712,7 @@ public ref struct Lexer
             ;
     }
 
-    private bool ConsumeUntil(ReadOnlySpan<char> start, ReadOnlySpan<char> end, TokenType type, TokenPosition offsetStart, bool toCode = false)
+    private bool ConsumeUntil(ReadOnlySpan<char> start, ReadOnlySpan<char> end, TokenType? type, TokenPosition offsetStart, bool toCode = false)
     {
         _toCode = toCode;
         var textStart = Position;
@@ -602,17 +720,27 @@ public ref struct Lexer
         if (!SkipUntil(start, end))
         {
             _toCode = false;
-            AddNode(type, new TokenRange(offsetStart, Position), CreateString(textStart, Position));
+
+            if (type.HasValue)
+            {
+                AddNode(type.Value, new TokenRange(File, offsetStart, Position), CreateString(textStart, Position));
+            }
+
             return true;
         }
 
         _toCode = false;
-        AddNode(type, new TokenRange(offsetStart, Position), CreateString(textStart, Position));
+
+        if (type.HasValue)
+        {
+            AddNode(type.Value, new TokenRange(File, offsetStart, Position), CreateString(textStart, Position));
+        }
+
         Forward(end.Length);
         return true;
     }
 
-    private bool Consume(ReadOnlySpan<char> data, ReadOnlySpan<char> end, TokenType type)
+    private bool Consume(ReadOnlySpan<char> data, ReadOnlySpan<char> end, TokenType? type)
     {
         var start = Position;
 
@@ -726,7 +854,7 @@ public ref struct Lexer
             {
                 break;
             }
-            
+
             var current = _input[_offset];
 
             if (breakOnNewLine && current is '\n' or '\r')

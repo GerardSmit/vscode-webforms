@@ -43,11 +43,8 @@ public class Control
             foreach (var attribute in type.CustomAttributes)
             {
                 var name = attribute.AttributeType.FullName;
-                
-                if (!_attributes.ContainsKey(name))
-                {
-                    _attributes.Add(name, attribute);
-                }
+
+                _attributes.TryAdd(name, attribute);
             }
 
             type = type.BaseType?.Resolve();

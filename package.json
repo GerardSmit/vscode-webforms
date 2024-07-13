@@ -20,20 +20,20 @@
         "watch": "rollup -c -w --env=dev"
     },
     "devDependencies": {
-        "@rollup/plugin-commonjs": "^21.0.1",
-        "@rollup/plugin-node-resolve": "^13.0.4",
-        "@rollup/plugin-replace": "^4.0.0",
-        "@rollup/plugin-typescript": "^8.2.5",
-        "@types/node": "^17.0.16",
+        "@rollup/plugin-commonjs": "^25.0.7",
+        "@rollup/plugin-node-resolve": "^15.2.3",
+        "@rollup/plugin-replace": "^5.0.4",
+        "@rollup/plugin-typescript": "^11.1.5",
+        "@types/node": "^20.8.7",
         "@types/vscode": "^1.1.53",
-        "rollup": "^2.56.3"
+        "rollup": "^4.1.4",
+        "typescript": "^5.2.2"
     },
     "main": "./extension/index",
     "engines": {
-        "vscode": "^1.52.0"
+        "vscode": "^1.82.0"
     },
     "activationEvents": [
-        "onCommand:webforms.toggleInspections",
         "onLanguage:webforms"
     ],
     "capabilities": {
@@ -116,8 +116,9 @@
         ]
     },
     "dependencies": {
-        "vscode-jsonrpc": "^6.0.0",
-        "vscode-languageclient": "^7.0.0"
+        "tslib": "^2.6.2",
+        "vscode-jsonrpc": "^8.2.0",
+        "vscode-languageclient": "^9.0.1"
     },
     "extensionDependencies": [
         "ms-dotnettools.vscode-dotnet-runtime"

@@ -24,11 +24,11 @@ public class ProjectAssemblyResolver : BaseAssemblyResolver
         return assembly;
     }
     
-    public AssemblyInfo? LoadAssembly(string path)
+    public void LoadAssembly(string path)
     {
         if (!File.Exists(path))
         {
-            return null;
+            return;
         }
 
         try
@@ -37,10 +37,10 @@ public class ProjectAssemblyResolver : BaseAssemblyResolver
 
             if (assemblyName.Name == null)
             {
-                return null;
+                return;
             }
-        
-            AssemblyInfo CreateAssembly(string _)
+
+            _assemblies.GetOrAdd(assemblyName.Name, _ =>
             {
                 var assembly = AssemblyDefinition.ReadAssembly(path, new ReaderParameters
                 {
@@ -48,13 +48,11 @@ public class ProjectAssemblyResolver : BaseAssemblyResolver
                 });
 
                 return new AssemblyInfo(assembly);
-            }
-
-            return _assemblies.GetOrAdd(assemblyName.Name, CreateAssembly);
+            });
         }
         catch
         {
-            return null;
+            // ignored
         }
     }
     
@@ -77,7 +75,7 @@ public class ProjectAssemblyResolver : BaseAssemblyResolver
 
     public AssemblyInfo? ResolveInfo(string name)
     {
-        return _assemblies.TryGetValue(name, out var info) ? info : null;
+        return _assemblies.GetValueOrDefault(name);
     }
 
     private AssemblyInfo? ResolveInfo(IMetadataScope scope)

@@ -25,7 +25,19 @@ public enum ControlReferenceSource
 
 public record struct ControlReference(Control Control, ControlReferenceSource Source, Document? Document = null);
 
-public record struct ControlKey(string Namespace, string Name);
+public readonly record struct ControlKey(string Namespace, string Name)
+{
+    public bool Equals(ControlKey other)
+    {
+        return Namespace.Equals(other.Namespace, StringComparison.OrdinalIgnoreCase) &&
+               Name.Equals(other.Name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Namespace,  StringComparer.OrdinalIgnoreCase.GetHashCode(Name));
+    }
+}
 
 public class Document
 {
@@ -90,7 +102,7 @@ public class Document
     {
         var diagnostics = new List<Diagnostic>();
         var parser = new Parser(diagnostics);
-        var lexer = new Lexer(Text);
+        var lexer = new Lexer(Uri.ToString(), Text);
 
         parser.Parse(ref lexer);
         Node = parser.Root;
@@ -174,7 +186,7 @@ public class Document
                     var path = src.Value;
                     var isRoot = false;
 
-                    if (path.StartsWith("/"))
+                    if (path.StartsWith('/'))
                     {
                         path = path[1..];
                         isRoot = true;
@@ -207,7 +219,7 @@ public class Document
 
                     if (document.Type is { } documentType &&
                         project.NamespaceControls.TryGetValue(documentType.Namespace, out var namespaceControls) &&
-                        namespaceControls.FirstOrDefault(i => i.Name.Equals(tagName.Value, StringComparison.OrdinalIgnoreCase)) is {} control)
+                        namespaceControls.FirstOrDefault(i => i.Name.Equals(documentType.Name, StringComparison.OrdinalIgnoreCase)) is {} control)
                     {
                         Controls[new ControlKey(tagPrefix.Value, tagName.Value)] = new ControlReference(control, ControlReferenceSource.Document, document);
                     }
@@ -434,6 +446,7 @@ public class Document
     public TokenRange GetRange(TokenRange range, TextSpan span)
     {
         return new TokenRange(
+            range.File,
             GetPosition(range, span.Start),
             GetPosition(range, span.End)
         );

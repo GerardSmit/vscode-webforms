@@ -13,7 +13,7 @@ export async function activate(context: vscode.ExtensionContext) {
         command = process.env.SERVER_PATH;
         args = [];
     } else {
-        command = await acquireDotNet('6.0', 'GerardSmit.vscode-webforms');
+        command = await acquireDotNet('8.0', 'GerardSmit.vscode-webforms');
         args = [path.join(__dirname, 'bin', 'WebForms.LanguageServer.dll')];
     }
 
@@ -142,7 +142,7 @@ export async function activate(context: vscode.ExtensionContext) {
             for (const extension of Object.keys(virtualDocument.contents)) {
                 const target = vscode.Uri.parse(`${virtualDocumentScheme}://${uri.path}.${extension}`);
                 const targetDiagnostics = vscode.languages.getDiagnostics(target);
-                
+                    
                 if (targetDiagnostics.length > 0) {
                     diagnostics = [...diagnostics, ...targetDiagnostics];
                 }
@@ -204,12 +204,16 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     client.registerProposedFeatures();
-    client.trace = Trace.Verbose;
     
     let inspectionsEnabled = false;
     let clientReady = false;
 
-    client.onReady().then(() => {
+    output.appendLine('Command: ' + command);
+    output.appendLine('Starting WebForms server...');
+
+    client.start().then(() => {
+        output.appendLine('WebForms server started');
+
         clientReady = true;
 
         context.subscriptions.push(client.onNotification('webforms/log', function(data) {
@@ -250,10 +254,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
                     if (currentVersion === undefined) {
                         vscode.workspace.openTextDocument(virtualUri).then(doc => {
-                            vscode.window.showTextDocument(doc, { preserveFocus: false }).then(editor => {
-                                client.diagnostics.set(uri, getDiagnostics(uri));
-                                return vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                            });
+                            client.diagnostics.set(uri, getDiagnostics(uri));
                         });
                     }
                 }
@@ -261,9 +262,8 @@ export async function activate(context: vscode.ExtensionContext) {
         }))
 
         client.sendNotification('webforms/inspections', { enabled: inspectionsEnabled });
+        context.subscriptions.push(client);
     });
-    
-    context.subscriptions.push(client.start());
 
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1000);
     statusBarItem.command = 'webforms.toggleInspections';

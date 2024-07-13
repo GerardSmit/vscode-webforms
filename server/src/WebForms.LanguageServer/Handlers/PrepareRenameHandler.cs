@@ -37,7 +37,7 @@ public class PrepareRenameHandler : IPrepareRenameHandler
     {
         return new RenameRegistrationOptions
         {
-            DocumentSelector = DocumentSelector.ForLanguage("webforms")
+            DocumentSelector = TextDocumentSelector.ForLanguage("webforms")
         };
     }
 }

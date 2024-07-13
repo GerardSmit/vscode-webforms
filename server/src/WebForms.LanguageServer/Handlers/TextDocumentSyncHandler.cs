@@ -66,13 +66,13 @@ internal class TextDocumentHandler : TextDocumentSyncHandlerBase
     }
 
     protected override TextDocumentSyncRegistrationOptions CreateRegistrationOptions(
-        SynchronizationCapability capability,
+        TextSynchronizationCapability capability,
         ClientCapabilities clientCapabilities)
     {
         return new TextDocumentSyncRegistrationOptions
         {
             Change = TextDocumentSyncKind.Full,
-            DocumentSelector = DocumentSelector.ForLanguage("webforms"),
+            DocumentSelector = TextDocumentSelector.ForLanguage("webforms"),
             Save = new SaveOptions { IncludeText = true }
         };
     }

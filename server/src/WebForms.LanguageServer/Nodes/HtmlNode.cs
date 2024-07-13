@@ -15,9 +15,14 @@ public class HtmlTagNode
     public TokenRange Range { get; set; }
 
     public TokenRange ElementRange => Namespace.HasValue ? Namespace.Value.Range.WithEnd(Name.Range.End) : Name.Range;
+
+    public override string ToString()
+    {
+        return Namespace.HasValue ? $"{Namespace}:{Name}" : Name.ToString();
+    }
 }
 
-public class HtmlNode : ContainerNode, IAttributeNode
+public class HtmlNode : ContainerNode, IAttributeNode, ISymbolNode
 {
     private const int TypeTag = 0;
     private const int TypeAttribute = 1;
@@ -43,25 +48,12 @@ public class HtmlNode : ContainerNode, IAttributeNode
     
     public string? ElementName { get; set; }
 
-    public override DocumentSymbol CreateSymbol()
+    public DocumentSymbol CreateSymbol()
     {
-        var detail = "";
-
-        if (RunAt == RunAt.Client && Attributes.TryGetValue("id", out var id))
-        {
-            detail += "#" + id;
-        }
-
-        if (Attributes.TryGetValue("class", out var className) ||
-            Attributes.TryGetValue("cssclass", out className))
-        {
-            detail += "." + string.Join(".", className.Value.Split(null));
-        }
-
         return new DocumentSymbol
         {
-            Name = Name,
-            Detail = detail,
+            Name = Attributes.TryGetValue("id", out var id) ? id : "<anonymous>",
+            Detail = StartTag.ToString(),
             Kind = SymbolKind.Field,
         };
     }

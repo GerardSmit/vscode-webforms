@@ -1,4 +1,5 @@
-﻿using System.Xml.Linq;
+﻿using System.Diagnostics;
+using System.Xml.Linq;
 using Mono.Cecil;
 
 namespace WebForms.Models;
@@ -32,6 +33,25 @@ public sealed class Project : IDisposable
         if (File.Exists(webConfigPath))
         {
             LoadWebConfig(webConfigPath);
+        }
+
+        if (Registrations.All(i => !string.Equals(i.Prefix, "asp", StringComparison.OrdinalIgnoreCase)))
+        {
+            Registrations.Add(new ControlRegistration(
+                Prefix: "asp",
+                TagName: null,
+                Source: null,
+                Namespace: "System.Web.UI",
+                Assembly: "System.Web"
+            ));
+
+            Registrations.Add(new ControlRegistration(
+                Prefix: "asp",
+                TagName: null,
+                Source: null,
+                Namespace: "System.Web.UI.WebControls",
+                Assembly: "System.Web"
+            ));
         }
     }
 
@@ -77,23 +97,15 @@ public sealed class Project : IDisposable
 
     public void LoadAssemblies()
     {
-        foreach (var path in Directory.GetFiles(System.IO.Path.Combine(Path, "bin"), "*.dll"))
-        {
-            Resolver.LoadAssembly(path);
-        }
-
-        // TODO: Fix hard-coded .NET Framework path
-        var defaultAssemblies = new[]
-        {
+        string[] assemblies =
+        [
+            ..Directory.GetFiles(System.IO.Path.Combine(Path, "bin"), "*.dll"),
             @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\System.Web.dll",
             @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\System.Web.Extensions.dll"
-        };
-        
-        foreach (var path in defaultAssemblies)
-        {
-            Resolver.LoadAssembly(path);
-        }
-        
+        ];
+
+        Parallel.ForEach(assemblies, Resolver.LoadAssembly);
+
         LoadControls();
         UpdateDocuments();
     }

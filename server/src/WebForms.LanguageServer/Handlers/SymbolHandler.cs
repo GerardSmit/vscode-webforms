@@ -15,22 +15,22 @@ public class DocumentSymbolHandler : IDocumentSymbolHandler
         _documentContainer = documentContainer;
     }
 
-    public Task<SymbolInformationOrDocumentSymbolContainer> Handle(DocumentSymbolParams request, CancellationToken cancellationToken)
+    public Task<SymbolInformationOrDocumentSymbolContainer?> Handle(DocumentSymbolParams request, CancellationToken cancellationToken)
     {
         var symbols = new List<SymbolInformationOrDocumentSymbol>();
 
         if (_documentContainer.Documents.TryGetValue(request.TextDocument.Uri, out var document))
         {
-            symbols.AddRange(document.Node.Children.Select(i => new SymbolInformationOrDocumentSymbol(CreateSymbol(document, i))));
+            symbols.AddRange(document.Node.Children.OfType<ISymbolNode>().Select(i => new SymbolInformationOrDocumentSymbol(CreateSymbol(document, i))));
         }
 
-        return Task.FromResult(new SymbolInformationOrDocumentSymbolContainer(symbols));
+        return Task.FromResult<SymbolInformationOrDocumentSymbolContainer?>(new SymbolInformationOrDocumentSymbolContainer(symbols));
     }
 
-    private static DocumentSymbol CreateSymbol(Document document, Node node)
+    private static DocumentSymbol CreateSymbol(Document document, ISymbolNode node)
     {
         var children = node is ContainerNode container
-            ? container.Children.Select(n => CreateSymbol(document, n))
+            ? container.Children.OfType<ISymbolNode>().Select(n => CreateSymbol(document, n))
             : Enumerable.Empty<DocumentSymbol>();
 
         return node.CreateSymbol() with
@@ -47,7 +47,7 @@ public class DocumentSymbolHandler : IDocumentSymbolHandler
     {
         return new DocumentSymbolRegistrationOptions
         {
-            DocumentSelector = DocumentSelector.ForLanguage("webforms")
+            DocumentSelector = TextDocumentSelector.ForLanguage("webforms")
         };
     }
 }

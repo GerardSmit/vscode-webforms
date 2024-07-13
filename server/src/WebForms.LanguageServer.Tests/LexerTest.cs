@@ -29,11 +29,11 @@ public class LexerTest
     )]
     [InlineData(
         @"<%: Test %>",
-        new[] { Expression }
+        new[] { EncodeExpression }
     )]
     [InlineData(
         @"<%-- Test --%>",
-        new[] { Comment }
+        new[] { ServerComment }
     )]
     [InlineData(
         @"<%# Test %>",
@@ -49,33 +49,33 @@ public class LexerTest
     // Void elements
     [InlineData(
         @"<br>",
-        new[] { TagOpen, ElementName, TagSlashClose }
+        new[] { Text }
     )]
     [InlineData(
         @"<br />",
-        new[] { TagOpen, ElementName, TagSlashClose }
+        new[] { Text }
     )]
         
     // Normal elements
     [InlineData(
         @"<div>",
-        new[] { TagOpen, ElementName, TagClose }
+        new[] { Text }
     )]
     [InlineData(
         @"<div></div>",
-        new[] { TagOpen, ElementName, TagClose, TagOpenSlash, ElementName, TagClose }
+        new[] { Text }
     )]
 
     // Attribute
     [InlineData(
         @"<div id=test>",
-        new[] { TagOpen, ElementName, Attribute, AttributeValue, TagClose }
+        new[] { Text }
     )]
     
     // Inline Expression
     [InlineData(
         @"<div id=""Hello<%= World %>"">",
-        new[] { TagOpen, ElementName, Attribute, AttributeValue, Expression, TagClose }
+        new[] { Text, Expression, Text }
     )]
 
     // Text
@@ -110,7 +110,7 @@ public class LexerTest
     [Theory]
     public void Parse(string input, TokenType[] expected)
     {
-        var lexer = new Lexer(input);
+        var lexer = new Lexer("file", input);
 
         var result = lexer.GetAll();
         var actual = result.Select(i => i.Type).ToArray();
@@ -142,7 +142,7 @@ public class LexerTest
     [Theory]
     public void ParseText(string input, object[] expected)
     {
-        var lexer = new Lexer(input);
+        var lexer = new Lexer("file", input);
 
         var result = lexer.GetAll();
         var actual = result.SelectMany(i => new object[] {i.Type, i.Text.Value}).ToArray();
@@ -167,7 +167,7 @@ public class LexerTest
     [Theory]
     public void ParseLine(string input, int[] expected)
     {
-        var lexer = new Lexer(input);
+        var lexer = new Lexer("file", input);
 
         var result = lexer.GetAll();
         var actual = result.Select(i => i.Range.Start.Line).ToArray();
@@ -188,7 +188,7 @@ public class LexerTest
     [Theory]
     public void ParseColumn(string input, int[] expected)
     {
-        var lexer = new Lexer(input);
+        var lexer = new Lexer("file", input);
 
         var result = lexer.GetAll();
         var actual = result.Select(i => i.Range.Start.Column).ToArray();

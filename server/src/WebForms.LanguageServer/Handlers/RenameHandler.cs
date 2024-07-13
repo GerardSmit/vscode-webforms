@@ -40,7 +40,7 @@ public class RenameHandler : IRenameHandler
     {
         return new RenameRegistrationOptions
         {
-            DocumentSelector = DocumentSelector.ForLanguage("webforms"),
+            DocumentSelector = TextDocumentSelector.ForLanguage("webforms"),
             PrepareProvider = true
         };
     }

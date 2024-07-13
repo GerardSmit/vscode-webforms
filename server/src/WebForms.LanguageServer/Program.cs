@@ -10,8 +10,7 @@ using WebForms.Services;
 var server = await LanguageServer.From(options =>
 {
     options
-        .WithInput(Console.OpenStandardInput())
-        .WithOutput(Console.OpenStandardOutput())
+        .WithCommandLineCommunicationChannel(args)
         .WithHandler<HighlightHandler>()
         .WithHandler<RenameHandler>()
         .WithHandler<CompletionHandler>()

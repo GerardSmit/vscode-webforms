@@ -9,7 +9,7 @@ public record HitRange(TokenRange Range, int Type = 0, TokenString? Value = null
     public Node Node { get; set; } = null!;
 }
 
-public abstract class Node
+public abstract class Node : INode
 {
     protected Node(NodeType type)
     {
@@ -21,8 +21,6 @@ public abstract class Node
     public TokenRange Range { get; set; }
     
     public ContainerNode? Parent { get; set; }
-
-    public abstract DocumentSymbol CreateSymbol();
 
     public virtual void AddRanges(ICollection<HitRange> ranges)
     {
